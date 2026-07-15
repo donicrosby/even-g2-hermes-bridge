@@ -19,8 +19,6 @@ services:
       - SSL_CERT_FILE=${SSL_CERT_FILE:-}
       - SSL_KEY_FILE=${SSL_KEY_FILE:-}
       - SSL_CA_FILE=${SSL_CA_FILE:-/etc/hermes-bridge/certs/root_ca.crt}
-    volumes:
-      - ${CERT_HOST_PATH:-./certs}:/etc/hermes-bridge/certs:ro
     networks:
       - traefik
     labels:
