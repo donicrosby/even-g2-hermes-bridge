@@ -1,0 +1,17 @@
+{
+  "name": "even-g2-hermes-glasses",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "^0.0.11"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}

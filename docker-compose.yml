@@ -1,0 +1,39 @@
+services:
+  bridge:
+    build:
+      context: ./bridge-server
+      dockerfile: Dockerfile
+    container_name: even-g2-hermes-bridge
+    restart: unless-stopped
+    environment:
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL}
+      - CHAT_MODEL=${CHAT_MODEL}
+      - WHISPER_MODEL=${WHISPER_MODEL:-whisper-1}
+      - SYSTEM_PROMPT=${SYSTEM_PROMPT:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - VAD_AGGRESSIVENESS=${VAD_AGGRESSIVENESS:-3}
+      - SILENCE_FRAMES=${SILENCE_FRAMES:-30}
+      - MIN_SPEECH_FRAMES=${MIN_SPEECH_FRAMES:-5}
+      - LOOKBACK_FRAMES=${LOOKBACK_FRAMES:-10}
+      - MAX_HISTORY_TURNS=${MAX_HISTORY_TURNS:-10}
+      - SSL_CERT_FILE=${SSL_CERT_FILE:-}
+      - SSL_KEY_FILE=${SSL_KEY_FILE:-}
+      - SSL_CA_FILE=${SSL_CA_FILE:-/etc/hermes-bridge/certs/root_ca.crt}
+    volumes:
+      - ${CERT_HOST_PATH:-./certs}:/etc/hermes-bridge/certs:ro
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hermes-bridge.rule=Host(`${BRIDGE_HOST:-hermes.local}`)"
+      - "traefik.http.routers.hermes-bridge.entrypoints=websecure"
+      - "traefik.http.routers.hermes-bridge.tls=true"
+      - "traefik.http.routers.hermes-bridge.tls.certresolver=${TRAEFIK_CERTRESOLVER:-smallstep}"
+      - "traefik.http.services.hermes-bridge.loadbalancer.server.port=8765"
+      - "traefik.http.middlewares.hermes-ws.headers.customRequestHeaders.Connection=Upgrade"
+      - "traefik.http.middlewares.hermes-ws.headers.customRequestHeaders.Upgrade=websocket"
+      - "traefik.http.routers.hermes-bridge.middlewares=hermes-ws"
+
+networks:
+  traefik:
+    external: true
