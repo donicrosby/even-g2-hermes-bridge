@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: even-g2-hermes-bridge
     restart: unless-stopped
+    ports:
+      - "8765:8765"
     environment:
       - LITELLM_BASE_URL=${LITELLM_BASE_URL}
       - CHAT_MODEL=${CHAT_MODEL}
