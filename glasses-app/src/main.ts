@@ -1,8 +1,18 @@
 /// <reference types="vite/client" />
 
-import { EvenAppBridge } from '@evenrealities/even_hub_sdk';
+import { EvenAppBridge, waitForEvenAppBridge, AudioInputSource } from '@evenrealities/even_hub_sdk';
 
-const WS_URL = import.meta.env.VITE_BRIDGE_URL || 'wss://hermes.local/ws/glasses';
+/**
+ * Bridge hostname configuration
+ *
+ * Set via VITE_BRIDGE_HOSTNAME env variable (set in vite.config.ts or .env file)
+ * Falls back to hermes.local, then the local IP inferred from hostname.
+ */
+const BRIDGE_HOSTNAME = import.meta.env.VITE_BRIDGE_HOSTNAME || 'hermes.local';
+
+/** Build WebSocket URL — ws for plain TCP, wss for TLS via Traefik */
+const PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${PROTOCOL}//${BRIDGE_HOSTNAME}:8765/ws/glasses`;
 
 let ws: WebSocket | null = null;
 let bridge: EvenAppBridge | null = null;
@@ -79,10 +89,9 @@ function connect() {
   };
 }
 
-function toggleMic() {
-  if (!bridge) return;
-  if (!ws || ws.readyState !== 1) {
-    setStatus('Not connected');
+async function toggleMic() {
+  if (!bridge || !ws || ws.readyState !== 1) {
+    setStatus(ws ? 'Not connected' : 'Bridge not ready');
     return;
   }
   micActive = !micActive;
@@ -90,30 +99,31 @@ function toggleMic() {
 
   if (micActive) {
     setStatus('Listening...');
-    bridge.audioControl(true);
+    const ok = await bridge.audioControl(true, AudioInputSource.Glasses);
+    if (!ok) log('audioControl(true) failed');
   } else {
     setStatus('Tap side to talk');
-    bridge.audioControl(false);
+    const ok = await bridge.audioControl(false);
+    if (!ok) log('audioControl(false) failed');
   }
 }
 
 async function init() {
-  bridge = new EvenAppBridge();
-  await bridge.init();
+  // SDK is a singleton — use waitForEvenAppBridge to ensure it's ready
+  bridge = await waitForEvenAppBridge();
+  log('Bridge ready: ' + bridge.ready);
 
-  bridge.onEvent((event: any) => {
-    if (event.type === 'audio') {
+  // Listen for evenHubEvent from SDK (includes audio events)
+  bridge.onEvenHubEvent((event) => {
+    if (event.audioEvent) {
       // PCM16 16kHz mono audio frames from glasses mic
+      const pcm = event.audioEvent.audioPcm;
+      log('Audio: ' + pcm.length + ' bytes (source: ' + event.audioEvent.source + ')');
       if (ws && ws.readyState === 1) {
-        ws.send(event.data);
+        // Convert Uint8Array to ArrayBuffer for WebSocket binary send
+        ws.send(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength) as ArrayBuffer);
       }
     }
-  });
-
-  // Side-touch toggles mic
-  bridge.onSideTouch((side: string) => {
-    log('Side touch: ' + side);
-    toggleMic();
   });
 
   connect();
