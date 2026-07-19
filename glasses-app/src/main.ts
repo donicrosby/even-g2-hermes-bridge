@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import { EvenAppBridge } from '@evenrealities/even_hub_sdk';
 
 const WS_URL = import.meta.env.VITE_BRIDGE_URL || 'wss://hermes.local/ws/glasses';
