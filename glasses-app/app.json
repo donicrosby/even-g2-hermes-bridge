@@ -1,0 +1,21 @@
+{
+  "package_id": "com.evenrealities.hermesbridge",
+  "edition": "202601",
+  "name": "Hermes Bridge",
+  "version": "1.0.0",
+  "min_app_version": "2.0.0",
+  "min_sdk_version": "0.0.12",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "WebSocket connection to bridge server.",
+      "whitelist": ["wss://hermes.local", "ws://hermes.local", "wss://192.168.1.100"]
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Voice input from G2 glasses."
+    }
+  ],
+  "supported_languages": ["en"]
+}
