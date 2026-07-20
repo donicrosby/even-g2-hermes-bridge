@@ -28,3 +28,6 @@ Thumbs.db
 
 # Docker
 *.pid
+
+# Even Realities packages
+*.ehpk
