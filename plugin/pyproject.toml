@@ -1,0 +1,83 @@
+[project]
+name = "byoa-plugin"
+version = "0.1.0"
+description = "Hermes platform plugin for Even Realities G2 smart glasses"
+requires-python = ">=3.11"
+dependencies = [
+    "websockets>=16.0",
+    "numpy>=1.26.0",
+    "faster-whisper>=1.2.1",
+    "qrcode>=7.4",
+    "pillow>=10.0",
+    "httpx>=0.27.0",
+    "anyio>=4.14.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "basedpyright>=0.10",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.25,<0.12"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["ALL"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",      # assert is the test mechanism
+    "PLR2004",   # magic values are test data
+    "SLF001",    # tests intentionally access private members
+    "ARG001",    # fixtures requested for side effects (reset_env, hermes_home)
+    "ARG002",    # test methods take fixture params they may not reference
+    "ARG005",    # lambdas in mock stubs often ignore args
+    "PLC0415",   # tests use deferred imports so reset_env runs first
+    "D100",      # tests don't need module-level docstrings (file docstring is enough)
+    "D101",      # TestX classes self-document via name
+    "D102",      # test_ methods self-document via name
+    "D103",      # test fixtures/helpers self-document via name
+    "D105",      # magic methods
+    "D107",      # __init__
+]
+"src/byoa_plugin/cli.py" = [
+    "T201",     # print() is the CLI output mechanism
+    "PLC0415",  # lazy imports intentional for optional CLI deps
+]
+"src/byoa_plugin/qr_setup.py" = [
+    "T201",     # print() is the QR display mechanism
+]
+"src/byoa_plugin/setup_flow.py" = [
+    "T201",     # print() for setup instructions
+    "PLC0415",  # lazy imports for optional deps
+]
+"src/byoa_plugin/__init__.py" = [
+    "PLC0415",  # lazy imports are the Hermes plugin pattern (deferred adapter/cli)
+]
+"src/byoa_plugin/adapter.py" = [
+    "PLC0415",  # lazy import of ASR module to avoid pulling torch on plugin load
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

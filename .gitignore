@@ -17,6 +17,7 @@ dist/
 # Env
 .env
 .env.*
+!.env.example
 
 # Tool caches
 .ruff_cache/
