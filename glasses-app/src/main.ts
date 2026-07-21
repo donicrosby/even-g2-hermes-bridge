@@ -8,6 +8,7 @@ import {
   TextContainerProperty,
   TextContainerUpgrade,
   CreateStartUpPageContainer,
+  RebuildPageContainer,
 } from '@evenrealities/even_hub_sdk';
 
 import {
@@ -96,6 +97,7 @@ let knownSessions: SessionItem[] = [];
 
 let unsubscribeEvents: (() => void) | null = null;
 let cleanupDone = false;
+let pageCreated = false;
 
 // ===== State persistence (SDK 0.0.12) ======================================
 // SDK 0.0.12 lacks setBackgroundState/onBackgroundRestore, so we persist via
@@ -568,58 +570,70 @@ function showConfigScreen(): void {
 
 async function buildPage(): Promise<void> {
   if (!bridge) return;
-  const result = await runBridge('createStartUpPageContainer', () =>
-    bridge!.createStartUpPageContainer(
-      new CreateStartUpPageContainer({
-        containerTotalNum: 3,
-        textObject: [
-          new TextContainerProperty({
-            xPosition: ASSISTANT_RECT.x,
-            yPosition: ASSISTANT_RECT.y,
-            width: ASSISTANT_RECT.w,
-            height: ASSISTANT_RECT.h,
-            containerID: ASSISTANT_CID,
-            containerName: ASSISTANT_CNAME,
-            isEventCapture: 1,
-            borderWidth: 0,
-            borderColor: 0,
-            paddingLength: 4,
-            content: accumulatedAssistantText || ' ',
-          }),
-          new TextContainerProperty({
-            xPosition: STATUS_RECT.x,
-            yPosition: STATUS_RECT.y,
-            width: STATUS_RECT.w,
-            height: STATUS_RECT.h,
-            containerID: STATUS_CID,
-            containerName: STATUS_CNAME,
-            isEventCapture: 0,
-            borderWidth: 0,
-            borderColor: 0,
-            paddingLength: 4,
-            content: 'Connecting...',
-          }),
-          new TextContainerProperty({
-            xPosition: SESSION_RECT.x,
-            yPosition: SESSION_RECT.y,
-            width: SESSION_RECT.w,
-            height: SESSION_RECT.h,
-            containerID: SESSION_CID,
-            containerName: SESSION_CNAME,
-            isEventCapture: 0,
-            borderWidth: 0,
-            borderColor: 0,
-            paddingLength: 4,
-            content: currentSessionName || ' ',
-          }),
-        ],
+  const containers = {
+    containerTotalNum: 3,
+    textObject: [
+      new TextContainerProperty({
+        xPosition: ASSISTANT_RECT.x,
+        yPosition: ASSISTANT_RECT.y,
+        width: ASSISTANT_RECT.w,
+        height: ASSISTANT_RECT.h,
+        containerID: ASSISTANT_CID,
+        containerName: ASSISTANT_CNAME,
+        isEventCapture: 1,
+        borderWidth: 0,
+        borderColor: 0,
+        paddingLength: 4,
+        content: accumulatedAssistantText || ' ',
       }),
-    ),
-  );
-  if (result !== StartUpPageCreateResult.success) {
-    log.error('createStartUpPageContainer failed', { result });
-  } else {
+      new TextContainerProperty({
+        xPosition: STATUS_RECT.x,
+        yPosition: STATUS_RECT.y,
+        width: STATUS_RECT.w,
+        height: STATUS_RECT.h,
+        containerID: STATUS_CID,
+        containerName: STATUS_CNAME,
+        isEventCapture: 0,
+        borderWidth: 0,
+        borderColor: 0,
+        paddingLength: 4,
+        content: 'Connecting...',
+      }),
+      new TextContainerProperty({
+        xPosition: SESSION_RECT.x,
+        yPosition: SESSION_RECT.y,
+        width: SESSION_RECT.w,
+        height: SESSION_RECT.h,
+        containerID: SESSION_CID,
+        containerName: SESSION_CNAME,
+        isEventCapture: 0,
+        borderWidth: 0,
+        borderColor: 0,
+        paddingLength: 4,
+        content: currentSessionName || ' ',
+      }),
+    ],
+  };
+
+  if (!pageCreated) {
+    const result = await runBridge('createStartUpPageContainer', () =>
+      bridge!.createStartUpPageContainer(
+        new CreateStartUpPageContainer(containers),
+      ),
+    );
+    if (result !== StartUpPageCreateResult.success) {
+      log.error('createStartUpPageContainer failed', { result });
+      return;
+    }
+    pageCreated = true;
     log.info('createStartUpPageContainer success');
+  } else {
+    await runBridge('rebuildPageContainer', () =>
+      bridge!.rebuildPageContainer(
+        new RebuildPageContainer(containers),
+      ),
+    );
+    log.info('rebuildPageContainer success');
   }
 }
 
