@@ -63,12 +63,14 @@ class TestOnSessionStart:
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+        import logging as _logging
+
         adapter = _make_adapter(last_chat_id=None)
         hooks.set_adapter(adapter)
         emit = MagicMock()
         monkeypatch.setattr(hooks, "_emit_active_frame", emit)
 
-        with caplog.at_level("DEBUG"):
+        with caplog.at_level(_logging.DEBUG, logger="byoa_plugin"):
             hooks._on_session_start(session_id="s-1", model="m", platform="even-g2")
 
         emit.assert_not_called()
@@ -160,8 +162,10 @@ class TestResolveChatId:
         self,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+        import logging as _logging
+
         adapter = _make_adapter(last_chat_id=None)
-        with caplog.at_level("DEBUG"):
+        with caplog.at_level(_logging.DEBUG, logger="byoa_plugin"):
             assert hooks._resolve_chat_id(adapter) is None
         assert "no last_chat_id" in caplog.text
 
