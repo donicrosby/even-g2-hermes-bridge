@@ -291,8 +291,10 @@ function handleHelloOk(frame: HelloOkFrame): void {
 }
 
 function handleAssistantDelta(frame: AssistantDeltaFrame): void {
+  log.info('assistant_delta received', { text: frame.text?.substring(0, 100), textLen: frame.text?.length ?? 0 });
   accumulatedAssistantText = frame.text || '';
   renderAssistant();
+  log.info('renderAssistant done', { contentLen: accumulatedAssistantText.length });
 }
 
 function handleAssistantFull(frame: AssistantFullFrame): void {
