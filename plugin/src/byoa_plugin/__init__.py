@@ -68,6 +68,11 @@ def register(ctx: object) -> None:
     """Plugin entry point — called by the Hermes plugin system."""
     from byoa_plugin.hooks import bind as bind_hooks
 
+    # The G2 glasses don't have a user identity concept — the bearer token
+    # is the sole auth gate. Auto-allow all users so the gateway doesn't
+    # silently drop messages when no allowlist env var is set.
+    os.environ.setdefault("EVEN_G2_ALLOW_ALL_USERS", "true")
+
     ctx.register_platform(
         name=PLUGIN_NAME,
         label=PLUGIN_LABEL,
@@ -76,6 +81,7 @@ def register(ctx: object) -> None:
         required_env=["EVEN_G2_BRIDGE_TOKEN"],
         env_enablement_fn=_env_enablement,
         cron_deliver_env_var="EVEN_G2_HOME_CHANNEL",
+        allow_all_env="EVEN_G2_ALLOW_ALL_USERS",
         max_message_length=2000,
         emoji=PLUGIN_EMOJI,
         platform_hint=PLUGIN_HINT,
