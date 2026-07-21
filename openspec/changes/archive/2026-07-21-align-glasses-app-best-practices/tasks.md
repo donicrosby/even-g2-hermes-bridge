@@ -51,5 +51,5 @@
 
 ## 8. OpenSpec wrap
 
-- [ ] 8.1 Run `openspec validate align-glasses-app-best-practices` and fix any reported spec/task issues.
-- [ ] 8.2 Stage and commit atomically: `feat(glasses-app): align with Even G2 best practices (exit dialog, timeouts, serialization)` plus the README touch in the same commit (or split as `docs(repo): sync touch handlers with glasses-app` if the reviewer prefers per-directory commits per `AGENTS.md`). Pair the new test file with the implementation in the same commit per the "Pair tests with implementation" git convention.
+- [x] 8.1 Run `openspec validate align-glasses-app-best-practices` and fix any reported spec/task issues.
+- [x] 8.2 Stage and commit atomically: `feat(glasses-app): align with Even G2 best practices (exit dialog, timeouts, serialization)` plus the README touch in the same commit (or split as `docs(repo): sync touch handlers with glasses-app` if the reviewer prefers per-directory commits per `AGENTS.md`). Pair the new test file with the implementation in the same commit per the "Pair tests with implementation" git convention. — **landed as 3 atomic commits**: `29f0593 feat(glasses-app)`, `34d99d5 docs(openspec)`, `3d56213 docs(repo)`.
