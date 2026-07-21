@@ -76,8 +76,6 @@ def register(ctx: object) -> None:
         required_env=["EVEN_G2_BRIDGE_TOKEN"],
         env_enablement_fn=_env_enablement,
         cron_deliver_env_var="EVEN_G2_HOME_CHANNEL",
-        allowed_users_env="EVEN_G2_ALLOWED_USERS",
-        allow_all_env="EVEN_G2_ALLOW_ALL_USERS",
         max_message_length=2000,
         emoji=PLUGIN_EMOJI,
         platform_hint=PLUGIN_HINT,
