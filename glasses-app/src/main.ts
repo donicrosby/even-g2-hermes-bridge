@@ -359,11 +359,6 @@ async function toggleMic(): Promise<void> {
   }
 }
 
-function interruptAgent(): void {
-  setStatus('Stopped');
-  sendFrame({ t: 'stop' } satisfies SimpleInboundFrame);
-}
-
 function switchSession(delta: 1 | -1): void {
   const frame: SessionsSwitchFrame = {
     t: 'sessions.switch',
@@ -586,7 +581,7 @@ function registerEventHandler(): void {
           void toggleMic();
           break;
         case OsEventTypeList.DOUBLE_CLICK_EVENT:
-          interruptAgent();
+          if (bridge) void bridge.shutDownPageContainer(1);
           break;
         case OsEventTypeList.FOREGROUND_ENTER_EVENT:
           backgrounded = false;
@@ -594,6 +589,10 @@ function registerEventHandler(): void {
         case OsEventTypeList.FOREGROUND_EXIT_EVENT:
           backgrounded = true;
           void saveState();
+          break;
+        case OsEventTypeList.ABNORMAL_EXIT_EVENT:
+        case OsEventTypeList.SYSTEM_EXIT_EVENT:
+          cleanupAndExit();
           break;
       }
     }
@@ -615,6 +614,17 @@ async function init(): Promise<void> {
   injectPhoneChrome();
   registerEventHandler();
   connect();
+}
+
+function cleanupAndExit(): void {
+  if (isCapturing && bridge) {
+    void bridge.audioControl(false);
+  }
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  void saveState();
 }
 
 init().catch((e) => {
