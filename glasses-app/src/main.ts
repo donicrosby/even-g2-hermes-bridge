@@ -195,7 +195,7 @@ function connect(): void {
     reconnectAttempts = 0;
     log.info('ws_open', { url });
     const helloBytes = wireHello(token, 'g2');
-    socket.send(helloBytes);
+    socket.send(helloBytes.buffer.slice(helloBytes.byteOffset, helloBytes.byteOffset + helloBytes.byteLength) as ArrayBuffer);
     log.info('frame', { direction: 'out', frame_type: 'hello', byte_size: helloBytes.byteLength });
   };
 
@@ -256,7 +256,7 @@ function scheduleReconnect(): void {
 
 function sendFrame(bytes: Uint8Array, frameType: string): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(bytes);
+    ws.send(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
     log.info('frame', {
       direction: 'out',
       frame_type: frameType,
