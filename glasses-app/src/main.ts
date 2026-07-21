@@ -8,7 +8,6 @@ import {
   TextContainerProperty,
   TextContainerUpgrade,
   CreateStartUpPageContainer,
-  RebuildPageContainer,
 } from '@evenrealities/even_hub_sdk';
 
 import {
@@ -32,7 +31,6 @@ import {
 } from './wire';
 import { truncateSessionName } from './lib/session';
 import { nextBackoffDelay } from './lib/reconnect';
-import { createBridgeQueue } from './lib/bridge';
 import { log, getLogBuffer, clearLogBuffer } from './log';
 import {
   serializeState,
@@ -56,16 +54,6 @@ function isConfigured(): boolean {
   const { url, token } = getConfig();
   return url.length > 0 && token.length > 0;
 }
-
-// ===== Bridge-call resilience ==============================================
-// Per the `glasses-ui` skill: "Serialize all bridge calls, not just images"
-// and "Add a per-call timeout to BLE calls — a single flaky hop can hang ~30s;
-// wrap calls in Promise.race with a few-second cap." Every bridge.* call in
-// this file goes through `queue.runBridge` to enforce both rules. The queue
-// implementation lives in `./lib/bridge.ts` (unit-tested).
-
-const queue = createBridgeQueue();
-const runBridge = queue.runBridge;
 
 // ===== Container layout (576×288 canvas) ===================================
 
@@ -106,8 +94,14 @@ let cleanupDone = false;
 
 async function restoreState(): Promise<void> {
   if (!bridge) return;
-  const raw = await runBridge('getLocalStorage', () => bridge!.getLocalStorage(STATE_KEY));
-  if (!raw) return;
+  let raw: string;
+  try {
+    raw = await bridge.getLocalStorage(STATE_KEY);
+  } catch (e) {
+    log.warn('getLocalStorage failed', { error: String(e) });
+    return;
+  }
+  if (!raw) return;;
   try {
     const merged = mergeState(currentMutableState(), parseState(raw));
     accumulatedAssistantText = merged.accumulatedAssistantText;
@@ -141,17 +135,19 @@ function scheduleSave(): void {
 
 async function saveState(): Promise<void> {
   if (!bridge) return;
-  await runBridge('setLocalStorage', () =>
-    bridge!.setLocalStorage(STATE_KEY, serializeState(currentMutableState())),
-  );
+  try {
+    await bridge.setLocalStorage(STATE_KEY, serializeState(currentMutableState()));
+  } catch (e) {
+    log.warn('setLocalStorage failed', { error: String(e) });
+  }
 }
 
 // ===== Rendering ===========================================================
 
 async function upgradeText(cid: number, cname: string, content: string): Promise<void> {
   if (!bridge) return;
-  await runBridge('textContainerUpgrade', () =>
-    bridge!.textContainerUpgrade(
+  try {
+    await bridge.textContainerUpgrade(
       new TextContainerUpgrade({
         containerID: cid,
         containerName: cname,
@@ -159,8 +155,10 @@ async function upgradeText(cid: number, cname: string, content: string): Promise
         contentOffset: 0,
         contentLength: 0,
       }),
-    ),
-  );
+    );
+  } catch (e) {
+    log.warn('textContainerUpgrade failed', { error: String(e), cid });
+  }
 }
 
 function renderAssistant(): void {
@@ -195,7 +193,7 @@ function connect(): void {
     reconnectAttempts = 0;
     log.info('ws_open', { url });
     const helloBytes = wireHello(token, 'g2');
-    socket.send(helloBytes.buffer.slice(helloBytes.byteOffset, helloBytes.byteOffset + helloBytes.byteLength) as ArrayBuffer);
+    socket.send(helloBytes.buffer.slice(helloBytes.byteOffset, helloBytes.byteOffset + helloBytes.byteLength));
     log.info('frame', { direction: 'out', frame_type: 'hello', byte_size: helloBytes.byteLength });
   };
 
@@ -256,7 +254,7 @@ function scheduleReconnect(): void {
 
 function sendFrame(bytes: Uint8Array, frameType: string): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    ws.send(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
     log.info('frame', {
       direction: 'out',
       frame_type: frameType,
@@ -291,10 +289,9 @@ function handleHelloOk(frame: HelloOkFrame): void {
 }
 
 function handleAssistantDelta(frame: AssistantDeltaFrame): void {
-  log.info('assistant_delta received', { text: frame.text?.substring(0, 100), textLen: frame.text?.length ?? 0 });
   accumulatedAssistantText = frame.text || '';
   renderAssistant();
-  log.info('renderAssistant done', { contentLen: accumulatedAssistantText.length });
+  void maybeBringToFront();
 }
 
 function handleAssistantFull(frame: AssistantFullFrame): void {
@@ -348,7 +345,11 @@ function handleError(frame: ErrorFrame): void {
 
 async function maybeBringToFront(): Promise<void> {
   if (!backgrounded || !bridge) return;
-  await runBridge('callEvenApp', () => bridge!.callEvenApp('bringToFront'));
+  try {
+    await bridge.callEvenApp('bringToFront');
+  } catch (e) {
+    log.warn('callEvenApp bringToFront failed', { error: String(e) });
+  }
 }
 
 // ===== Touch handlers =======================================================
@@ -364,9 +365,7 @@ async function toggleMic(): Promise<void> {
 
   if (isCapturing) {
     setStatus('Listening...');
-    const ok = await runBridge('audioControl', () =>
-      bridge!.audioControl(true, AudioInputSource.Glasses),
-    );
+    const ok = await bridge.audioControl(true, AudioInputSource.Glasses);
     if (!ok) {
       console.warn('[Hermes] audioControl(true) failed');
       isCapturing = false;
@@ -376,7 +375,7 @@ async function toggleMic(): Promise<void> {
     sendFrame(wireAudioStart(), 'audio.start');
   } else {
     setStatus('Processing...');
-    await runBridge('audioControl', () => bridge!.audioControl(false));
+    await bridge.audioControl(false);
     sendFrame(wireAudioStop(), 'audio.stop');
   }
 }
@@ -640,10 +639,8 @@ async function buildPage(): Promise<void> {
     ],
   };
 
-  const result = await runBridge('createStartUpPageContainer', () =>
-    bridge!.createStartUpPageContainer(
-      new CreateStartUpPageContainer(containers),
-    ),
+  const result = await bridge.createStartUpPageContainer(
+    new CreateStartUpPageContainer(containers),
   );
   if (result === StartUpPageCreateResult.success) {
     log.info('createStartUpPageContainer success');
@@ -679,7 +676,7 @@ function registerEventHandler(): void {
           // user can still cancel. If they confirm, the SDK fires
           // SYSTEM_EXIT_EVENT (7) and cleanup runs in cleanupAndExit() below.
           if (bridge) {
-            void runBridge('shutDownPageContainer', () => bridge!.shutDownPageContainer(1));
+            void bridge.shutDownPageContainer(1);
           }
           break;
         case OsEventTypeList.FOREGROUND_ENTER_EVENT:
@@ -737,7 +734,7 @@ function cleanupAndExit(): void {
   }
 
   if (isCapturing && bridge) {
-    void runBridge('audioControl', () => bridge!.audioControl(false));
+    void bridge.audioControl(false);
   }
   if (ws) {
     ws.close();
