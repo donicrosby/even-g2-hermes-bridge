@@ -1,0 +1,211 @@
+// Hermes Bridge Wire Protocol
+//
+// Single source of truth for every frame exchanged between the even-g2 plugin
+// (Python, server side) and the glasses-app (TypeScript, client side) over
+// their WebSocket connection.
+//
+// Migration history: this .proto replaced the hand-rolled JSON-over-WebSocket
+// protocol defined in the former `plugin/src/byoa_plugin/protocol.py`. See
+// openspec/changes/protobuf-wire-protocol/ for the design rationale.
+//
+// FIELD NUMBER STABILITY: Protobuf wire compatibility depends on field
+// numbers, not names. NEVER renumber existing fields. Renaming a field is
+// safe; recycling a retired field number is not. New frame types get the
+// next free oneof variant number.
+
+syntax = "proto3";
+
+package hermes_bridge.v1;
+
+// ============================================================================
+// Frame envelope
+// ============================================================================
+
+// Every WebSocket message is exactly one serialized `Frame`. The receiver
+// parses once and switches on the `payload` oneof discriminant.
+//
+// Field numbers are partitioned by direction so additions stay readable:
+//   1-8    inbound (client -> server) control frames
+//   11-21  outbound (server -> client) control frames
+//   99     audio data (bidirectional; sent in bulk between audio_start and
+//          audio_stop)
+message Frame {
+  oneof payload {
+    HelloFrame hello = 1;
+    TextFrame text = 2;
+    AudioStartFrame audio_start = 3;
+    AudioStopFrame audio_stop = 4;
+    SessionsListFrame sessions_list = 5;
+    SessionsSwitchFrame sessions_switch = 6;
+    SessionsNewFrame sessions_new = 7;
+    StopFrame stop = 8;
+
+    HelloOkFrame hello_ok = 11;
+    AssistantDeltaFrame assistant_delta = 12;
+    AssistantFullFrame assistant = 13;
+    ToolStartFrame tool_start = 14;
+    ToolEndFrame tool_end = 15;
+    TurnDoneFrame turn_done = 16;
+    SessionsFrame sessions = 17;
+    ActiveFrame active = 18;
+    HistoryFrame history = 19;
+    TranscriptFrame transcript = 20;
+    ErrorFrame error = 21;
+
+    AudioDataFrame audio_data = 99;
+  }
+}
+
+// ============================================================================
+// Inbound frames (client -> server)
+// ============================================================================
+
+// First frame on every connection. Authenticates the client and identifies
+// the glasses device. Server replies with HelloOkFrame or closes with 1008.
+message HelloFrame {
+  string token = 1;
+  string device = 2;  // defaults to "g2" if omitted
+}
+
+// User-typed text message. Forwarded to the gateway as a TEXT MessageEvent.
+message TextFrame {
+  string content = 1;
+}
+
+// Signals the start of an audio capture stream. Subsequent AudioDataFrames
+// are accumulated until AudioStopFrame arrives.
+message AudioStartFrame {
+  // intentionally empty — signals intent only
+}
+
+// Signals the end of an audio capture stream. The accumulated PCM is
+// dispatched to ASR and the resulting transcript is forwarded to the gateway.
+message AudioStopFrame {
+  // intentionally empty
+}
+
+// Requests the server's session list for this chat_id. Server replies with
+// SessionsFrame.
+message SessionsListFrame {
+  // intentionally empty
+}
+
+// Requests an active-session switch. Target is either a relative offset
+// ("+1", "-1") or an absolute session id.
+message SessionsSwitchFrame {
+  string target = 1;  // e.g. "+1", "-1", or "s-abc123"
+}
+
+// Requests creation of a new session. Server replies with ActiveFrame once
+// the gateway has bound the new session id.
+message SessionsNewFrame {
+  // intentionally empty
+}
+
+// Requests interruption of any in-flight assistant turn.
+message StopFrame {
+  // intentionally empty
+}
+
+// ============================================================================
+// Outbound frames (server -> client)
+// ============================================================================
+
+// Successful handshake response. `active` carries the bound session id when
+// known (returning connection); omitted on first-ever connect.
+message HelloOkFrame {
+  optional string active = 1;  // session id when known
+  repeated string caps = 2;    // server capabilities, e.g. "streaming"
+}
+
+// Incremental assistant text delta. The glasses-app accumulates these into
+// the assistant reply container.
+message AssistantDeltaFrame {
+  string text = 1;
+}
+
+// Full assistant reply (non-streaming path). Replaces any accumulated delta
+// state in one shot.
+message AssistantFullFrame {
+  string text = 1;
+}
+
+// Signals that the agent has started calling a tool. The glasses-app renders
+// a "tool running" status line.
+message ToolStartFrame {
+  string name = 1;
+  optional string label = 2;  // human-readable, e.g. "web_search: weather today"
+  optional string emoji = 3;
+}
+
+// Signals that a tool call has completed.
+message ToolEndFrame {
+  string name = 1;
+  bool ok = 2;  // false on error
+}
+
+// Signals the end of an assistant turn. The glasses-app marks the reply as
+// complete and stops the streaming cursor animation.
+message TurnDoneFrame {
+  // intentionally empty
+}
+
+// Server response to SessionsListFrame. `items` is the per-chat_id session
+// list; `active` is the currently-bound session id (if any).
+message SessionsFrame {
+  repeated SessionItem items = 1;
+  optional string active = 2;
+}
+
+// One entry in a session list or history.
+message SessionItem {
+  string id = 1;
+  optional string name = 2;  // human-readable name when available
+}
+
+// Informs the glasses-app that the active session has changed (either because
+// the user requested a switch or because the gateway created a new one).
+message ActiveFrame {
+  string id = 1;
+  optional string name = 2;  // falls back to id[:16] when absent
+}
+
+// Conversation history for a session. Currently unused on the wire but kept
+// in the schema for future server-side history push.
+message HistoryFrame {
+  string id = 1;  // session id
+  repeated HistoryItem items = 2;
+  bool ok = 3;  // false if the server couldn't fetch history
+}
+
+// One turn in a conversation history.
+message HistoryItem {
+  string role = 1;    // "user" | "assistant" | "system"
+  string content = 2;
+}
+
+// Transcript of the user's spoken audio, post-ASR. Displayed briefly so the
+// user can confirm what the glasses heard.
+message TranscriptFrame {
+  string text = 1;
+}
+
+// Generic error frame. Displayed in the status line on the glasses.
+message ErrorFrame {
+  string msg = 1;
+}
+
+// ============================================================================
+// Bidirectional frames
+// ============================================================================
+
+// Raw PCM audio chunk sent from glasses to server during an active audio
+// capture (between AudioStartFrame and AudioStopFrame).
+//
+// Format: signed 16-bit little-endian integers, 16 kHz, mono. Wrapping these
+// in a Frame variant (rather than sending as raw WS binary messages) lets
+// every WS message self-describe its type — eliminates the previous
+// `isinstance(raw, bytes)` heuristic in server.py.
+message AudioDataFrame {
+  bytes pcm = 1;
+}

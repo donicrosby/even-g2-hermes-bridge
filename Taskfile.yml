@@ -1,0 +1,65 @@
+version: '3'
+
+vars:
+  ROOT_DIR:
+    sh: cd "$(dirname $(dirname "{{.TASKFILE_DIR}}"))" && pwd
+
+tasks:
+  proto:
+    desc: Generate Python and TypeScript stubs from plugin/proto/hermes_bridge.proto
+    dir: '{{.TASKFILE_DIR}}/plugin'
+    cmds:
+      # PATH must include both the plugin venv (for protoc-gen-mypy) and the
+      # glasses-app node_modules (for protoc-gen-ts_proto). Buf looks up
+      # local plugins via PATH.
+      - cmd: |
+          PATH="{{.ROOT_DIR}}/plugin/.venv/bin:{{.ROOT_DIR}}/glasses-app/node_modules/.bin:$PATH" \
+            "{{.ROOT_DIR}}/glasses-app/node_modules/.bin/buf" generate
+
+  proto-check:
+    desc: Verify generated stubs are in sync with the .proto file (CI gate)
+    cmds:
+      - task: proto
+      - cmd: git diff --exit-code -- plugin/src/byoa_plugin/proto_gen/ glasses-app/src/proto_gen/
+        dir: '{{.ROOT_DIR}}'
+
+  plugin-test:
+    desc: Run the plugin's pytest suite
+    dir: '{{.TASKFILE_DIR}}/plugin'
+    cmds:
+      - uv run pytest -q
+
+  plugin-lint:
+    desc: Run ruff + basedpyright on the plugin
+    dir: '{{.TASKFILE_DIR}}/plugin'
+    cmds:
+      - uv run ruff check src/ tests/
+      - uv run basedpyright src/
+
+  plugin-check:
+    desc: Full plugin CI gate
+    cmds:
+      - task: plugin-lint
+      - task: plugin-test
+
+  app-test:
+    desc: Run the glasses-app vitest suite
+    dir: '{{.TASKFILE_DIR}}/glasses-app'
+    cmds:
+      - npm run test
+
+  app-check:
+    desc: Full glasses-app CI gate (typecheck + lint + test + build)
+    dir: '{{.TASKFILE_DIR}}/glasses-app'
+    cmds:
+      - npm run typecheck
+      - npm run lint
+      - npm run test
+      - npm run build
+
+  check:
+    desc: Run all CI gates across the repo
+    cmds:
+      - task: proto-check
+      - task: plugin-check
+      - task: app-check
