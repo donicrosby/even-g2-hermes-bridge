@@ -225,7 +225,13 @@ class EvenG2Adapter(BasePlatformAdapter):
     def _spawn(self, coro: Coroutine) -> None:
         task = asyncio.create_task(coro)
         self._bg_tasks.add(task)
-        task.add_done_callback(self._bg_tasks.discard)
+
+        def _on_done(t: asyncio.Task[None]) -> None:
+            self._bg_tasks.discard(t)
+            if t.exception() and not t.cancelled():
+                LOG.exception("spawned task failed", error=str(t.exception()))
+
+        task.add_done_callback(_on_done)
 
     def _on_text(self, chat_id: str, text: str) -> None:
         self._last_chat_id = chat_id
@@ -328,13 +334,19 @@ class EvenG2Adapter(BasePlatformAdapter):
         self, chat_id: str, content: str, reply_to: object = None, metadata: object = None,  # noqa: ARG002
     ) -> SendResult:
         """Deliver an assistant message — full text pushed as a delta."""
+        LOG.info("send chat_id=%s content_len=%d", chat_id, len(content or ""))
         state = self.registry.stream_state(chat_id)
         state.reset()
         delta = state.delta_for(content)
         if delta:
             ok = await self.registry.send_frame(chat_id, proto.assistant_delta(delta))
             if not ok:
+                LOG.warning("send failed chat_id=%s (no active connection)", chat_id)
                 return SendResult(success=False, error="no active connection")
+            LOG.info(
+                "frame direction=out frame_type=assistant.delta byte_size=%d chat_id=%s",
+                len(delta), chat_id,
+            )
         return SendResult(success=True, message_id="g2")
 
     async def edit_message(
