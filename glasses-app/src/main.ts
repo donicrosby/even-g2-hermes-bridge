@@ -32,7 +32,7 @@ import {
 import { truncateSessionName } from './lib/session';
 import { nextBackoffDelay } from './lib/reconnect';
 import { createBridgeQueue } from './lib/bridge';
-import { log } from './log';
+import { log, getLogBuffer, clearLogBuffer } from './log';
 import {
   serializeState,
   parseState,
@@ -477,6 +477,15 @@ function showConfigScreen(): void {
         ${hasExisting ? `<button id="hermes-cancel-btn" style="${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text}">Cancel</button>` : ''}
       </div>
       <p id="hermes-error" style="color:#c33;margin-top:12px;font-size:14px;display:none"></p>
+      <div style="margin-top:16px;border-top:1px solid ${EVEN_COLORS.inputBg};padding-top:12px">
+        <button id="hermes-logs-btn" style="${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};width:100%">
+          Show Logs
+        </button>
+        <pre id="hermes-logs-panel" style="display:none;margin-top:8px;padding:8px;background:${EVEN_COLORS.inputBg};border-radius:8px;font-size:11px;line-height:1.4;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;font-family:monospace"></pre>
+        <button id="hermes-logs-clear" style="display:none;${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};margin-top:4px;font-size:12px">
+          Clear
+        </button>
+      </div>
     </div>`;
   document.body.appendChild(form);
 
@@ -513,6 +522,42 @@ function showConfigScreen(): void {
 
   cancelBtn?.addEventListener('click', () => {
     form.remove();
+  });
+
+  const logsBtn = document.getElementById('hermes-logs-btn');
+  const logsPanel = document.getElementById('hermes-logs-panel');
+  const logsClear = document.getElementById('hermes-logs-clear');
+  let logsInterval: ReturnType<typeof setInterval> | null = null;
+
+  function refreshLogs(): void {
+    if (!logsPanel) return;
+    const entries = getLogBuffer();
+    logsPanel.textContent = entries.length > 0
+      ? entries.join('\n')
+      : '(no logs yet)';
+    logsPanel.scrollTop = logsPanel.scrollHeight;
+  }
+
+  logsBtn?.addEventListener('click', () => {
+    if (!logsPanel || !logsClear || !logsBtn) return;
+    const isVisible = logsPanel.style.display !== 'none';
+    if (isVisible) {
+      logsPanel.style.display = 'none';
+      logsClear.style.display = 'none';
+      logsBtn.textContent = 'Show Logs';
+      if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
+    } else {
+      logsPanel.style.display = 'block';
+      logsClear.style.display = 'inline-block';
+      logsBtn.textContent = 'Hide Logs';
+      refreshLogs();
+      logsInterval = setInterval(refreshLogs, 1000);
+    }
+  });
+
+  logsClear?.addEventListener('click', () => {
+    clearLogBuffer();
+    refreshLogs();
   });
 }
 

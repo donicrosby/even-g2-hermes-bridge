@@ -1,21 +1,11 @@
 // Structured logger for the glasses-app. Emits JSON-shaped objects via
 // `console.log`, which the Flutter WebView host captures and surfaces in the
-// phone's app log. Use the structured `log.info(event, fields)` form rather
-// than free-text `console.log(...)` so logs are machine-parseable.
-//
-// Example output:
-//   {"level":"info","event":"frame","direction":"in","frame_type":"hello.ok",
-//    "byte_size":48,"timestamp":"2026-07-21T13:39:28.886Z"}
+// phone's app log. Also maintains a ring buffer for the phone-side logs panel.
 
 type LogFields = Record<string, unknown>;
 
-const isDebug = (() => {
-  try {
-    return localStorage.getItem('bridge_log_level')?.toUpperCase() === 'DEBUG';
-  } catch {
-    return false;
-  }
-})();
+const MAX_ENTRIES = 200;
+const logBuffer: string[] = [];
 
 function emit(level: string, event: string, fields: LogFields): void {
   const entry = {
@@ -24,9 +14,47 @@ function emit(level: string, event: string, fields: LogFields): void {
     ...fields,
     timestamp: new Date().toISOString(),
   };
+  const line = JSON.stringify(entry);
   // eslint-disable-next-line no-console -- glasses-app logs flow through console.log to the Flutter host.
-  console.log(JSON.stringify(entry));
+  console.log(line);
+  logBuffer.push(line);
+  if (logBuffer.length > MAX_ENTRIES) logBuffer.shift();
 }
+
+export function getLogBuffer(): string[] {
+  return [...logBuffer];
+}
+
+export function clearLogBuffer(): void {
+  logBuffer.length = 0;
+}
+
+// Catch uncaught errors and unhandled promise rejections so they appear
+// in the logs panel instead of silently crashing the WebView.
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (e) => {
+    emit('error', 'uncaught_error', {
+      message: e.message,
+      filename: e.filename,
+      line: e.lineno,
+      col: e.colno,
+      error: e.error instanceof Error ? e.error.stack : String(e.error),
+    });
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    emit('error', 'unhandled_rejection', {
+      reason: e.reason instanceof Error ? e.reason.stack : String(e.reason),
+    });
+  });
+}
+
+const isDebug = (() => {
+  try {
+    return localStorage.getItem('bridge_log_level')?.toUpperCase() === 'DEBUG';
+  } catch {
+    return false;
+  }
+})();
 
 export const log = {
   debug(event: string, fields: LogFields = {}): void {
