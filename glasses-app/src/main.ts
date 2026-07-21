@@ -647,16 +647,9 @@ async function buildPage(): Promise<void> {
   );
   if (result === StartUpPageCreateResult.success) {
     log.info('createStartUpPageContainer success');
-    return;
+  } else {
+    log.info('createStartUpPageContainer returned non-success, containers from previous session still active', { result: Number(result) });
   }
-
-  log.info('createStartUpPageContainer non-success, falling back to rebuild', { result: Number(result) });
-  await runBridge('rebuildPageContainer', () =>
-    bridge!.rebuildPageContainer(
-      new RebuildPageContainer(containers),
-    ),
-  );
-  log.info('rebuildPageContainer done');
 }
 
 function registerEventHandler(): void {
