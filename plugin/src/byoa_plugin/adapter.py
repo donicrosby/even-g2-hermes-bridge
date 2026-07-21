@@ -157,6 +157,12 @@ class EvenG2Adapter(BasePlatformAdapter):
         # chat_id → session_id mapping (Hermes owns sessions; we just route).
         self._session_by_chat: dict[str, str] = {}
 
+        # v1 limitation: plugin session hooks don't receive chat_id in their
+        # payload (verified upstream contract), so we attribute session events
+        # to whatever chat_id most recently sent an inbound frame. Single-pair
+        # per adapter is the documented v1 scope.
+        self._last_chat_id: str | None = None
+
         # Fire-and-forget task references — prevents GC before completion.
         # Primitives migrated to anyio (Event, Lock, sleep); bg-task tracking
         # still uses asyncio.create_task — full TaskGroup migration requires
@@ -182,6 +188,7 @@ class EvenG2Adapter(BasePlatformAdapter):
             on_sessions_switch=self._on_sessions_switch,
             on_sessions_new=self._on_sessions_new,
             on_stop=self._on_stop,
+            active_session_lookup=self.session_for_chat,
         )
         await self._server.start()
         self._mark_connected()
@@ -210,6 +217,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         task.add_done_callback(self._bg_tasks.discard)
 
     def _on_text(self, chat_id: str, text: str) -> None:
+        self._last_chat_id = chat_id
         LOG.info("inbound text chat_id=%s len=%d", chat_id, len(text))
         event = MessageEvent(
             chat_id=chat_id,
@@ -220,6 +228,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         self._spawn(self.handle_message(event))
 
     def _on_audio_stop(self, chat_id: str, pcm: bytes) -> None:
+        self._last_chat_id = chat_id
         self._spawn(self._handle_voice(chat_id, pcm))
 
     async def _handle_voice(self, chat_id: str, pcm: bytes) -> None:
@@ -252,6 +261,7 @@ class EvenG2Adapter(BasePlatformAdapter):
 
     def _on_sessions_list(self, chat_id: str) -> None:
         """Forward /sessions command to the gateway."""
+        self._last_chat_id = chat_id
         event = MessageEvent(
             chat_id=chat_id,
             text="/sessions",
@@ -262,6 +272,7 @@ class EvenG2Adapter(BasePlatformAdapter):
 
     def _on_sessions_switch(self, chat_id: str, target: str) -> None:
         """Forward /resume command to the gateway."""
+        self._last_chat_id = chat_id
         event = MessageEvent(
             chat_id=chat_id,
             text=f"/resume {target}",
@@ -272,6 +283,7 @@ class EvenG2Adapter(BasePlatformAdapter):
 
     def _on_sessions_new(self, chat_id: str) -> None:
         """Forward /new command to the gateway."""
+        self._last_chat_id = chat_id
         event = MessageEvent(
             chat_id=chat_id,
             text="/new",

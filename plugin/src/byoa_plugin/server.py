@@ -63,6 +63,7 @@ class BridgeServer:
         on_sessions_switch: Callable[[str, str], None] | None = None,
         on_sessions_new: Callable[[str], None] | None = None,
         on_stop: Callable[[str], None] | None = None,
+        active_session_lookup: Callable[[str], str | None] | None = None,
     ) -> None:
         """Initialize the bridge server and its event callbacks."""
         self.cfg = cfg
@@ -74,6 +75,7 @@ class BridgeServer:
         self._on_sessions_switch = on_sessions_switch
         self._on_sessions_new = on_sessions_new
         self._on_stop = on_stop
+        self._active_session_lookup = active_session_lookup
         self._server = None
 
     async def start(self) -> None:
@@ -151,8 +153,13 @@ class BridgeServer:
             await self.registry.register(chat_id, ws)
             LOG.info("hello ok: chat_id=%s", chat_id)
 
+            active = (
+                self._active_session_lookup(chat_id)
+                if self._active_session_lookup
+                else None
+            )
             caps = ["text", "voice", "tool-events", "sessions", "streaming"]
-            await ws.send(proto.hello_ok(caps=caps))
+            await ws.send(proto.hello_ok(active=active, caps=caps))
 
             # ----- Phase 2: frame dispatch loop -----
             audio_buf = bytearray()

@@ -26,7 +26,7 @@ _ADAPTER: EvenG2Adapter | None = None
 
 
 def bind(ctx: object) -> None:
-    """Register pre/post tool-call hooks with the gateway.
+    """Register pre/post tool-call and session lifecycle hooks with the gateway.
 
     Called from plugin register(ctx). Stores the adapter reference for the
     hook callbacks to use.
@@ -37,9 +37,17 @@ def bind(ctx: object) -> None:
     try:
         ctx.register_hook("pre_tool_call", _pre_tool_call)
         ctx.register_hook("post_tool_call", _post_tool_call)
-        LOG.debug("tool-call hooks registered")
+        ctx.register_hook("on_session_start", _on_session_start)
+        ctx.register_hook("on_session_reset", _on_session_reset)
+        ctx.register_hook("on_session_end", _on_session_end)
+        ctx.register_hook("on_session_finalize", _on_session_finalize)
+        LOG.debug(
+            "hooks registered: pre_tool_call, post_tool_call, "
+            "on_session_start, on_session_reset, on_session_end, "
+            "on_session_finalize",
+        )
     except (AttributeError, TypeError) as e:
-        LOG.warning("failed to register tool-call hooks: %s", e)
+        LOG.warning("failed to register hooks: %s", e)
 
 
 def set_adapter(adapter: EvenG2Adapter) -> None:
@@ -164,3 +172,120 @@ def _post_tool_call(
         task = loop.create_task(adapter.registry.send_frame(chat_id, frame))
         adapter._bg_tasks.add(task)  # noqa: SLF001
         task.add_done_callback(adapter._bg_tasks.discard)  # noqa: SLF001
+
+
+# ---- Session lifecycle hooks ----------------------------------------------
+
+
+def _resolve_chat_id(adapter: EvenG2Adapter) -> str | None:
+    """Return the most recent inbound chat_id, or None if no frame has arrived.
+
+    Plugin session hooks don't receive chat_id in their payload (verified
+    upstream contract); this pointer is the only way to attribute a session
+    event to a glasses pair. v1 limitation: single-pair per adapter.
+    """
+    chat_id = getattr(adapter, "_last_chat_id", None)
+    if chat_id is None:
+        LOG.debug("session hook: no last_chat_id; skipping")
+    return chat_id
+
+
+def _emit_active_frame(adapter: EvenG2Adapter, chat_id: str, session_id: str) -> None:
+    """Send `proto.active(session_id, name=session_id[:16])` to chat_id."""
+    frame = proto.active(session_id, name=session_id[:16])
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        return
+    if loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            adapter.registry.send_frame(chat_id, frame), loop,
+        )
+    else:
+        task = loop.create_task(adapter.registry.send_frame(chat_id, frame))
+        adapter._bg_tasks.add(task)  # noqa: SLF001
+        task.add_done_callback(adapter._bg_tasks.discard)  # noqa: SLF001
+
+
+def _record_and_emit(session_id: str) -> None:
+    """Shared body for _on_session_start and _on_session_reset.
+
+    Records the session_id → chat_id binding (so chat_for_session keeps
+    working for tool-call hooks) and emits an `active` frame to the glasses.
+    """
+    adapter = _get_adapter()
+    if adapter is None:
+        return
+    chat_id = _resolve_chat_id(adapter)
+    if chat_id is None:
+        return
+    adapter._session_by_chat[chat_id] = session_id  # noqa: SLF001
+    LOG.info(
+        "session bound chat_id=%s session_id=%s — emitting active frame",
+        chat_id,
+        session_id,
+    )
+    _emit_active_frame(adapter, chat_id, session_id)
+
+
+def _on_session_start(
+    *,
+    session_id: str,
+    _model: object = None,
+    _platform: object = None,
+    **_: object,
+) -> None:
+    """Gateway created a new session. Bind it and emit `active` to glasses."""
+    _record_and_emit(session_id)
+
+
+def _on_session_reset(
+    *,
+    session_id: str,
+    _platform: object = None,
+    **_: object,
+) -> None:
+    """Gateway swapped in a fresh session key (e.g. after /new). Same as start."""
+    _record_and_emit(session_id)
+
+
+def _on_session_end(
+    *,
+    session_id: str,
+    completed: object = None,
+    interrupted: object = None,
+    _model: object = None,
+    _platform: object = None,
+    **_: object,
+) -> None:
+    """End of a run_conversation() call. Log only — no UI action needed."""
+    LOG.info(
+        "session end sid=%s completed=%s interrupted=%s",
+        session_id,
+        completed,
+        interrupted,
+    )
+
+
+def _on_session_finalize(
+    *,
+    session_id: str | None = None,
+    _platform: object = None,
+    **_: object,
+) -> None:
+    """Gateway tears down a session. Remove the reverse mapping if present."""
+    if session_id is None:
+        return
+    adapter = _get_adapter()
+    if adapter is None:
+        return
+    # Find any chat_id whose bound session_id matches and remove it.
+    # v1: at most one match expected.
+    matching = [
+        cid
+        for cid, sid in adapter._session_by_chat.items()  # noqa: SLF001
+        if sid == session_id
+    ]
+    for cid in matching:
+        del adapter._session_by_chat[cid]  # noqa: SLF001
+        LOG.debug("session finalize: removed chat_id=%s -> session_id=%s", cid, session_id)
