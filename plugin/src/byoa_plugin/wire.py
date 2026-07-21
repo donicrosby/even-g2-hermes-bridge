@@ -17,6 +17,8 @@ from typing import Any
 
 from byoa_plugin.proto_gen import hermes_bridge_pb2 as _pb
 
+STREAMING_CURSOR = " ▉"
+
 # Frame envelope + parser exceptions
 Frame = _pb.Frame
 

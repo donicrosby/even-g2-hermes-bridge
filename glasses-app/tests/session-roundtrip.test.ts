@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // These tests exercise the glasses-app's session round-trip behavior. We can't
 // import main.ts directly (it triggers init() which hangs on waitForEvenAppBridge

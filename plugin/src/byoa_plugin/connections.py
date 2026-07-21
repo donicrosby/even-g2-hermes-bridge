@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import anyio
 from websockets.exceptions import ConnectionClosed
 
-from byoa_plugin import protocol as proto
+from byoa_plugin import wire as proto
 
 if TYPE_CHECKING:
     from websockets.asyncio.server import ServerConnection

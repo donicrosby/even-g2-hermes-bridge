@@ -1,8 +1,8 @@
 """Fake glasses-app WebSocket client for plugin integration tests.
 
-Minimal async client speaking the even-g2 wire protocol:
+Minimal async client speaking the even-g2 Protobuf wire protocol:
   - connect + send hello with a token
-  - send text / audio.start / audio.stop / binary / arbitrary frames
+  - send text / audio.start / audio.stop / audio_data / arbitrary frames
   - capture server-pushed responses for assertions
   - observe close codes for auth-failure / protocol-violation tests
 """
@@ -10,12 +10,14 @@ Minimal async client speaking the even-g2 wire protocol:
 from __future__ import annotations
 
 import contextlib
-import json
 from typing import TYPE_CHECKING, Any
 
 import anyio
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
+
+from byoa_plugin import wire
+from byoa_plugin.proto_gen import hermes_bridge_pb2 as _pb
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -31,9 +33,6 @@ class FakeGlassesClient:
             hello_ok = await client.recv_one()
             await client.send_text("hi")
             frames = await client.drain()
-
-    The context manager handles connect/close. Manual lifecycle is also
-    supported via `await client.connect()` and `await client.close()`.
     """
 
     def __init__(
@@ -46,7 +45,7 @@ class FakeGlassesClient:
         self.url = url
         self.token = token
         self.device = device
-        self.received_frames: list[str] = []
+        self.received_frames: list[_pb.Frame] = []
         self.close_code: int | None = None
         self.close_reason: str | None = None
         self._ws: Any = None
@@ -62,54 +61,54 @@ class FakeGlassesClient:
         await self.close()
 
     async def send_hello(self) -> None:
-        await self._send({"t": "hello", "token": self.token, "device": self.device})
+        await self._ws.send(wire.hello(self.token, self.device))
 
     async def send_text(self, text: str) -> None:
-        await self._send({"t": "text", "text": text})
+        await self._ws.send(wire.text(text))
 
     async def send_audio_start(self) -> None:
-        await self._send({"t": "audio.start"})
+        await self._ws.send(wire.audio_start())
 
     async def send_audio_stop(self) -> None:
-        await self._send({"t": "audio.stop"})
+        await self._ws.send(wire.audio_stop())
 
     async def send_sessions_list(self) -> None:
-        await self._send({"t": "sessions.list"})
+        await self._ws.send(wire.sessions_list())
+
+    async def send_sessions_switch(self, target: str) -> None:
+        await self._ws.send(wire.sessions_switch(target))
+
+    async def send_sessions_new(self) -> None:
+        await self._ws.send(wire.sessions_new())
 
     async def send_stop(self) -> None:
-        await self._send({"t": "stop"})
+        await self._ws.send(wire.stop())
 
     async def send_binary(self, data: bytes) -> None:
-        await self._ws.send(data)
+        await self._ws.send(wire.audio_data(data))
 
-    async def send_raw(self, frame: dict[str, Any]) -> None:
-        await self._send(frame)
-
-    async def drain(self, *, timeout: float = 0.3) -> list[str]:  # noqa: ASYNC109
-        """Collect frames the server has pushed within timeout.
-
-        Returns whatever arrived (possibly empty). Does not raise on timeout.
-        """
-        frames: list[str] = []
+    async def drain(self, *, timeout: float = 0.3) -> list[_pb.Frame]:  # noqa: ASYNC109
+        """Collect frames the server has pushed within timeout."""
+        frames: list[_pb.Frame] = []
         try:
             with anyio.fail_after(timeout):
                 while True:
-                    frame = await self._ws.recv()
-                    frames.append(self._decode(frame))
+                    raw = await self._ws.recv()
+                    frames.append(wire.parse_frame(raw))
         except TimeoutError:
             pass
         self.received_frames.extend(frames)
         return frames
 
-    async def recv_one(self, *, timeout: float = 1.0) -> str | None:  # noqa: ASYNC109
+    async def recv_one(self, *, timeout: float = 1.0) -> _pb.Frame | None:  # noqa: ASYNC109
         try:
             with anyio.fail_after(timeout):
-                frame = await self._ws.recv()
+                raw = await self._ws.recv()
         except TimeoutError:
             return None
-        decoded = self._decode(frame)
-        self.received_frames.append(decoded)
-        return decoded
+        frame = wire.parse_frame(raw)
+        self.received_frames.append(frame)
+        return frame
 
     async def expect_close(
         self, *, timeout: float = 1.0,  # noqa: ASYNC109
@@ -129,21 +128,12 @@ class FakeGlassesClient:
                 await self._ws.close()
             self._ws = None
 
-    async def _send(self, frame: dict[str, Any]) -> None:
-        await self._ws.send(json.dumps(frame))
 
-    @staticmethod
-    def _decode(frame: str | bytes) -> str:
-        if isinstance(frame, bytes):
-            return frame.decode("utf-8", errors="replace")
-        return frame
+def parse_frame(raw: bytes) -> _pb.Frame:
+    """Parse raw WS bytes into a Frame protobuf."""
+    return wire.parse_frame(raw)
 
 
-def parse_frame(raw: str) -> dict[str, Any]:
-    """Parse a JSON frame string into a dict (mirrors protocol.parse_client)."""
-    return json.loads(raw)
-
-
-def frames_of_type(frames: Iterable[str], frame_type: str) -> list[dict[str, Any]]:
-    """Filter decoded frames by their `t` field."""
-    return [f for f in (parse_frame(r) for r in frames) if f.get("t") == frame_type]
+def frames_of_type(frames: Iterable[_pb.Frame], kind: str) -> list[_pb.Frame]:
+    """Filter decoded frames by their oneof payload kind."""
+    return [f for f in frames if f.WhichOneof("payload") == kind]

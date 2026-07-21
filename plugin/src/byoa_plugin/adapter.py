@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import anyio
 
-from byoa_plugin import protocol as proto
+from byoa_plugin import wire as proto
 from byoa_plugin.connections import ConnectionRegistry
 from byoa_plugin.server import BridgeServer
 

@@ -11,7 +11,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from byoa_plugin import protocol as proto
+from byoa_plugin import wire as proto
 
 if TYPE_CHECKING:
     from byoa_plugin.adapter import EvenG2Adapter

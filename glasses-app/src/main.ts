@@ -10,22 +10,25 @@ import {
   CreateStartUpPageContainer,
 } from '@evenrealities/even_hub_sdk';
 
-import type {
-  HelloFrame,
-  AudioStartFrame,
-  AudioStopFrame,
-  SimpleInboundFrame,
-  SessionsSwitchFrame,
-  SessionsFrame,
-  HelloOkFrame,
-  AssistantDeltaFrame,
-  AssistantFullFrame,
-  ToolStartFrame,
-  ToolEndFrame,
-  TranscriptFrame,
-  ActiveFrame,
-  ErrorFrame,
-} from './protocol';
+import {
+  hello as wireHello,
+  audioStart as wireAudioStart,
+  audioStop as wireAudioStop,
+  audioData as wireAudioData,
+  sessionsList as wireSessionsList,
+  sessionsSwitch as wireSessionsSwitch,
+  parseFrame,
+  type Frame,
+  type HelloOkFrame,
+  type AssistantDeltaFrame,
+  type AssistantFullFrame,
+  type ToolStartFrame,
+  type ToolEndFrame,
+  type SessionsFrame,
+  type ActiveFrame,
+  type TranscriptFrame,
+  type ErrorFrame,
+} from './wire';
 import { truncateSessionName } from './lib/session';
 import { nextBackoffDelay } from './lib/reconnect';
 import { createBridgeQueue } from './lib/bridge';
@@ -190,34 +193,35 @@ function connect(): void {
   socket.onopen = () => {
     reconnectAttempts = 0;
     log.info('ws_open', { url });
-    const hello: HelloFrame = {
-      t: 'hello',
-      token: token,
-      device: 'g2',
-    };
-    socket.send(JSON.stringify(hello));
-    log.info('frame', { direction: 'out', frame_type: 'hello', byte_size: JSON.stringify(hello).length });
+    const helloBytes = wireHello(token, 'g2');
+    socket.send(helloBytes);
+    log.info('frame', { direction: 'out', frame_type: 'hello', byte_size: helloBytes.byteLength });
   };
 
   socket.onmessage = (ev) => {
-    if (ev.data instanceof ArrayBuffer) {
-      log.debug('frame', { direction: 'in', frame_type: 'binary', byte_size: ev.data.byteLength });
-      return;
-    }
+    if (!(ev.data instanceof ArrayBuffer)) return;
     try {
-      const parsed: unknown = JSON.parse(ev.data as string);
-      if (parsed && typeof parsed === 'object') {
-        const frameObj = parsed as Record<string, unknown>;
-        log.info('frame', {
-          direction: 'in',
-          frame_type: String(frameObj.t ?? 'unknown'),
-          byte_size: (ev.data as string).length,
-        });
-        handleFrame(frameObj);
-      }
+      const frame = parseFrame(new Uint8Array(ev.data));
+      const kind = frame.helloOk ? 'hello.ok'
+        : frame.assistantDelta ? 'assistant.delta'
+        : frame.assistant ? 'assistant'
+        : frame.toolStart ? 'tool.start'
+        : frame.toolEnd ? 'tool.end'
+        : frame.turnDone ? 'turn.done'
+        : frame.sessions ? 'sessions'
+        : frame.active ? 'active'
+        : frame.transcript ? 'transcript'
+        : frame.error ? 'error'
+        : 'unknown';
+      log.info('frame', {
+        direction: 'in',
+        frame_type: kind,
+        byte_size: ev.data.byteLength,
+      });
+      handleFrame(frame);
     } catch (e) {
       log.warn('frame_decode_error', {
-        byte_size: typeof ev.data === 'string' ? ev.data.length : 0,
+        byte_size: ev.data.byteLength,
         error: e instanceof Error ? e.message : String(e),
       });
     }
@@ -249,63 +253,30 @@ function scheduleReconnect(): void {
   setTimeout(connect, delay);
 }
 
-function sendFrame(frame: OutboundClientFrame): void {
+function sendFrame(bytes: Uint8Array, frameType: string): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    const text = JSON.stringify(frame);
-    ws.send(text);
+    ws.send(bytes);
     log.info('frame', {
       direction: 'out',
-      frame_type: String(frame.t),
-      byte_size: text.length,
+      frame_type: frameType,
+      byte_size: bytes.byteLength,
     });
   }
 }
 
 // ===== Inbound frame handling ==============================================
 
-type OutboundClientFrame =
-  | HelloFrame
-  | AudioStartFrame
-  | AudioStopFrame
-  | SimpleInboundFrame
-  | SessionsSwitchFrame;
-
-function handleFrame(frame: Record<string, unknown>): void {
-  const t = frame.t as string;
-  switch (t) {
-    case 'hello.ok':
-      handleHelloOk(frame as unknown as HelloOkFrame);
-      break;
-    case 'assistant.delta':
-      handleAssistantDelta(frame as unknown as AssistantDeltaFrame);
-      break;
-    case 'assistant':
-      handleAssistantFull(frame as unknown as AssistantFullFrame);
-      break;
-    case 'tool.start':
-      handleToolStart(frame as unknown as ToolStartFrame);
-      break;
-    case 'tool.end':
-      handleToolEnd(frame as unknown as ToolEndFrame);
-      break;
-    case 'sessions':
-      handleSessions(frame as unknown as SessionsFrame);
-      break;
-    case 'transcript':
-      handleTranscript(frame as unknown as TranscriptFrame);
-      break;
-    case 'turn.done':
-      handleTurnDone();
-      break;
-    case 'active':
-      handleActive(frame as unknown as ActiveFrame);
-      break;
-    case 'error':
-      handleError(frame as unknown as ErrorFrame);
-      break;
-    default:
-      console.warn('[Hermes] Unknown frame type:', t);
-  }
+function handleFrame(frame: Frame): void {
+  if (frame.helloOk) handleHelloOk(frame.helloOk);
+  else if (frame.assistantDelta) handleAssistantDelta(frame.assistantDelta);
+  else if (frame.assistant) handleAssistantFull(frame.assistant);
+  else if (frame.toolStart) handleToolStart(frame.toolStart);
+  else if (frame.toolEnd) handleToolEnd(frame.toolEnd);
+  else if (frame.turnDone) handleTurnDone();
+  else if (frame.sessions) handleSessions(frame.sessions);
+  else if (frame.active) handleActive(frame.active);
+  else if (frame.transcript) handleTranscript(frame.transcript);
+  else if (frame.error) handleError(frame.error);
 }
 
 function handleHelloOk(frame: HelloOkFrame): void {
@@ -315,7 +286,7 @@ function handleHelloOk(frame: HelloOkFrame): void {
     renderSession();
     scheduleSave();
   }
-  sendFrame({ t: 'sessions.list' });
+  sendFrame(wireSessionsList(), 'sessions.list');
 }
 
 function handleAssistantDelta(frame: AssistantDeltaFrame): void {
@@ -331,7 +302,7 @@ function handleAssistantFull(frame: AssistantFullFrame): void {
 }
 
 function handleToolStart(frame: ToolStartFrame): void {
-  const label = ('label' in frame && frame.label) || frame.name || 'Tool';
+  const label = frame.label || frame.name || 'Tool';
   setStatus(label);
 }
 
@@ -352,17 +323,18 @@ function handleTurnDone(): void {
 
 function handleActive(frame: ActiveFrame): void {
   currentSessionId = frame.id;
-  currentSessionName = ('name' in frame && frame.name) || frame.id;
+  currentSessionName = frame.name || frame.id;
   renderSession();
   scheduleSave();
 }
 
 function handleSessions(frame: SessionsFrame): void {
-  knownSessions = frame.items ?? [];
-  if (frame.active && frame.active !== currentSessionId) {
-    currentSessionId = frame.active;
-    const match = knownSessions.find((s) => s.id === frame.active);
-    currentSessionName = (match && match.name) || frame.active;
+  knownSessions = (frame.items) ?? [];
+  const active = frame.active;
+  if (active && active !== currentSessionId) {
+    currentSessionId = active;
+    const match = knownSessions.find((s) => s.id === active);
+    currentSessionName = (match && match.name) || active;
     renderSession();
     scheduleSave();
   }
@@ -399,33 +371,23 @@ async function toggleMic(): Promise<void> {
       setStatus('Mic failed');
       return;
     }
-    const frame: AudioStartFrame = { t: 'audio.start' };
-    sendFrame(frame);
+    sendFrame(wireAudioStart(), 'audio.start');
   } else {
     setStatus('Processing...');
     await runBridge('audioControl', () => bridge!.audioControl(false));
-    const frame: AudioStopFrame = { t: 'audio.stop' };
-    sendFrame(frame);
+    sendFrame(wireAudioStop(), 'audio.stop');
   }
 }
 
 function switchSession(delta: 1 | -1): void {
-  const frame: SessionsSwitchFrame = {
-    t: 'sessions.switch',
-    id: delta > 0 ? '+1' : '-1',
-  };
-  sendFrame(frame);
+  sendFrame(wireSessionsSwitch(delta > 0 ? '+1' : '-1'), 'sessions.switch');
 }
 
 // ===== Audio streaming =====================================================
 
 function handleAudioPcm(pcm: Uint8Array): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  const buf = pcm.buffer.slice(
-    pcm.byteOffset,
-    pcm.byteOffset + pcm.byteLength,
-  ) as ArrayBuffer;
-  ws.send(buf);
+  sendFrame(wireAudioData(pcm), 'audio_data');
 }
 
 // ===== Config screen (phone-side, Even design system) ====================

@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from fake_client import parse_frame
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -69,11 +68,10 @@ class TestHelloOkActiveField:
         token = bridge_server_with_lookup.cfg.token
         async with FakeGlassesClient(url, token=token, device="g2-known") as client:
             await client.send_hello()
-            raw = await client.recv_one(timeout=2.0)
-        assert raw is not None
-        frame = parse_frame(raw)
-        assert frame["t"] == "hello.ok"
-        assert frame.get("active") == "s-known"
+            frame = await client.recv_one(timeout=2.0)
+        assert frame is not None
+        assert frame.WhichOneof("payload") == "hello_ok"
+        assert frame.hello_ok.active == "s-known"
 
     async def test_active_omitted_when_lookup_returns_none(
         self,
@@ -83,11 +81,9 @@ class TestHelloOkActiveField:
 
         url = bridge_server_with_lookup.url
         token = bridge_server_with_lookup.cfg.token
-        # Use a device id that the lookup returns None for.
         async with FakeGlassesClient(url, token=token, device="g2-unknown") as client:
             await client.send_hello()
-            raw = await client.recv_one(timeout=2.0)
-        assert raw is not None
-        frame = parse_frame(raw)
-        assert frame["t"] == "hello.ok"
-        assert "active" not in frame
+            frame = await client.recv_one(timeout=2.0)
+        assert frame is not None
+        assert frame.WhichOneof("payload") == "hello_ok"
+        assert not frame.hello_ok.active

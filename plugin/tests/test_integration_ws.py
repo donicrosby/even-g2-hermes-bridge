@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import anyio
 import pytest
-from fake_client import FakeGlassesClient, parse_frame
+from fake_client import FakeGlassesClient
 
 if TYPE_CHECKING:
     from types import SimpleNamespace
@@ -37,12 +37,10 @@ class TestAuthHandshake:
         token = bridge_server.cfg.token
         async with FakeGlassesClient(url, token=token) as client:
             await client.send_hello()
-            hello_ok = await client.recv_one(timeout=2.0)
-        assert hello_ok is not None
-        frame = parse_frame(hello_ok)
-        assert frame["t"] == "hello.ok"
-        assert "caps" in frame
-        assert "streaming" in frame["caps"]
+            frame = await client.recv_one(timeout=2.0)
+        assert frame is not None
+        assert frame.WhichOneof("payload") == "hello_ok"
+        assert "streaming" in list(frame.hello_ok.caps)
 
 
 class TestTextFrameRouting:
@@ -80,7 +78,7 @@ class TestTextFrameRouting:
 
 
 class TestUnknownFrameTolerance:
-    """Task 10.5: unknown frame type must be logged, not fatal."""
+    """Task 10.5: unknown/malformed frame must be logged, not fatal."""
 
     async def test_unknown_frame_does_not_close_connection(
         self, bridge_server: SimpleNamespace,
@@ -91,7 +89,7 @@ class TestUnknownFrameTolerance:
             await client.send_hello()
             await client.recv_one(timeout=2.0)
 
-            await client.send_raw({"t": "totally-bogus", "payload": 42})
+            await client._ws.send(b"\x00")
             await anyio.sleep(0.2)
 
             await client.send_text("still here")
@@ -109,7 +107,7 @@ class TestUnknownFrameTolerance:
             await client.recv_one(timeout=2.0)
 
             await client.send_text("before")
-            await client.send_raw({"t": "what-is-this"})
+            await client._ws.send(b"\x00")
             await client.send_text("after")
             await client.drain(timeout=0.5)
 
