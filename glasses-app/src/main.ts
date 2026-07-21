@@ -486,6 +486,9 @@ function showConfigScreen(): void {
         <button id="hermes-logs-clear" style="display:none;${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};margin-top:4px;font-size:12px">
           Clear
         </button>
+        <button id="hermes-logs-copy" style="display:none;${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};margin-top:4px;font-size:12px">
+          Copy
+        </button>
       </div>
     </div>`;
   document.body.appendChild(form);
@@ -528,6 +531,7 @@ function showConfigScreen(): void {
   const logsBtn = document.getElementById('hermes-logs-btn');
   const logsPanel = document.getElementById('hermes-logs-panel');
   const logsClear = document.getElementById('hermes-logs-clear');
+  const logsCopy = document.getElementById('hermes-logs-copy');
   let logsInterval: ReturnType<typeof setInterval> | null = null;
 
   function refreshLogs(): void {
@@ -543,16 +547,18 @@ function showConfigScreen(): void {
   }
 
   logsBtn?.addEventListener('click', () => {
-    if (!logsPanel || !logsClear || !logsBtn) return;
+    if (!logsPanel || !logsClear || !logsCopy || !logsBtn) return;
     const isVisible = logsPanel.style.display !== 'none';
     if (isVisible) {
       logsPanel.style.display = 'none';
       logsClear.style.display = 'none';
+      logsCopy.style.display = 'none';
       logsBtn.textContent = 'Show Logs';
       if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
     } else {
       logsPanel.style.display = 'block';
       logsClear.style.display = 'inline-block';
+      logsCopy.style.display = 'inline-block';
       logsBtn.textContent = 'Hide Logs';
       refreshLogs();
       logsInterval = setInterval(refreshLogs, 1000);
@@ -562,6 +568,26 @@ function showConfigScreen(): void {
   logsClear?.addEventListener('click', () => {
     clearLogBuffer();
     refreshLogs();
+  });
+
+  logsCopy?.addEventListener('click', () => {
+    const text = getLogBuffer().join('\n');
+    const btn = logsCopy;
+    navigator.clipboard.writeText(text).then(() => {
+      if (btn) btn.textContent = 'Copied!';
+      setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 2000);
+    }).catch(() => {
+      if (logsPanel) {
+        const range = document.createRange();
+        range.selectNodeContents(logsPanel);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        document.execCommand('copy');
+        if (btn) btn.textContent = 'Copied!';
+        setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 2000);
+      }
+    });
   });
 }
 
