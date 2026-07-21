@@ -58,20 +58,21 @@ except ImportError:  # pragma: no cover — only hit outside Hermes runtime
         VOICE = "voice"
 
     class MessageEvent:  # type: ignore[no-redef]
-        """Stub inbound message event."""
+        """Stub inbound message event — mirrors the real gateway dataclass."""
 
         def __init__(
             self,
-            chat_id: str,
             text: str = "",
             message_type: str = "text",
-            metadata: dict[str, Any] | None = None,
+            source: object = None,
+            message_id: str | None = None,
+            **_kwargs: object,
         ) -> None:
             """Store inbound message fields."""
-            self.chat_id = chat_id
             self.text = text
             self.message_type = message_type
-            self.metadata = metadata or {}
+            self.source = source
+            self.message_id = message_id
 
     class BasePlatformAdapter:  # type: ignore[no-redef]
         """Stub base class matching the real gateway interface."""
@@ -81,6 +82,16 @@ except ImportError:  # pragma: no cover — only hit outside Hermes runtime
             self.config = config
             self.platform = platform
             self._message_handler: Callable[..., Any] | None = None
+
+        def build_source(self, chat_id: str, **kwargs: object) -> object:
+            """Stub — returns a SimpleNamespace mimicking SessionSource."""
+            from types import SimpleNamespace
+
+            return SimpleNamespace(
+                platform=getattr(self, "platform", None),
+                chat_id=chat_id,
+                **kwargs,
+            )
 
         def _mark_connected(self) -> None:
             """Stub — no-op outside the gateway."""
@@ -220,10 +231,9 @@ class EvenG2Adapter(BasePlatformAdapter):
         self._last_chat_id = chat_id
         LOG.info("inbound text chat_id=%s len=%d", chat_id, len(text))
         event = MessageEvent(
-            chat_id=chat_id,
             text=text,
             message_type=MessageType.TEXT,
-            metadata={"platform": "even-g2", "device": chat_id},
+            source=self.build_source(chat_id=chat_id),
         )
         self._spawn(self.handle_message(event))
 
@@ -252,10 +262,9 @@ class EvenG2Adapter(BasePlatformAdapter):
         await self.registry.send_frame(chat_id, proto.transcript(text))
         LOG.info("inbound voice chat_id=%s transcript=%r", chat_id, text[:80])
         event = MessageEvent(
-            chat_id=chat_id,
             text=text,
             message_type=MessageType.VOICE,
-            metadata={"platform": "even-g2", "device": chat_id, "asr": True},
+            source=self.build_source(chat_id=chat_id),
         )
         await self.handle_message(event)
 
@@ -263,10 +272,9 @@ class EvenG2Adapter(BasePlatformAdapter):
         """Forward /sessions command to the gateway."""
         self._last_chat_id = chat_id
         event = MessageEvent(
-            chat_id=chat_id,
             text="/sessions",
             message_type=MessageType.TEXT,
-            metadata={"platform": "even-g2", "device": chat_id},
+            source=self.build_source(chat_id=chat_id),
         )
         self._spawn(self.handle_message(event))
 
@@ -274,10 +282,9 @@ class EvenG2Adapter(BasePlatformAdapter):
         """Forward /resume command to the gateway."""
         self._last_chat_id = chat_id
         event = MessageEvent(
-            chat_id=chat_id,
             text=f"/resume {target}",
             message_type=MessageType.TEXT,
-            metadata={"platform": "even-g2", "device": chat_id},
+            source=self.build_source(chat_id=chat_id),
         )
         self._spawn(self.handle_message(event))
 
@@ -285,10 +292,9 @@ class EvenG2Adapter(BasePlatformAdapter):
         """Forward /new command to the gateway."""
         self._last_chat_id = chat_id
         event = MessageEvent(
-            chat_id=chat_id,
             text="/new",
             message_type=MessageType.TEXT,
-            metadata={"platform": "even-g2", "device": chat_id},
+            source=self.build_source(chat_id=chat_id),
         )
         self._spawn(self.handle_message(event))
 
