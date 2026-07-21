@@ -287,13 +287,15 @@ class EvenG2Adapter(BasePlatformAdapter):
         session_id = self._session_by_chat.get(chat_id)
         if session_id:
             items = [{"id": session_id, "name": session_id[:16]}]
-            await self.registry.send_frame(
-                chat_id, proto.sessions(items, active=session_id),
-            )
+            frame = proto.sessions(items, active=session_id)
         else:
-            await self.registry.send_frame(
-                chat_id, proto.sessions([], active=None),
-            )
+            items = [{"id": "_pending", "name": "Tap mic to start"}]
+            frame = proto.sessions(items, active="_pending")
+        await self.registry.send_frame(chat_id, frame)
+        LOG.info(
+            "frame direction=out frame_type=sessions byte_size=%d chat_id=%s",
+            len(frame), chat_id,
+        )
 
     def _on_sessions_switch(self, chat_id: str, target: str) -> None:
         """Forward /resume command to the gateway."""

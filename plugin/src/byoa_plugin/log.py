@@ -78,8 +78,11 @@ class StructuredLogger:
             return
         if args:
             event = event % args
-        extra = {_FIELDS_ATTR: fields} if fields else {}
-        self._logger.log(level, event, extra=extra, stack_info=False)
+        if fields:
+            event = event + " " + " ".join(
+                f"{k}={v}" for k, v in fields.items()
+            )
+        self._logger.log(level, event)
 
     def debug(self, event: str, *args: Any, **fields: Any) -> None:
         self._log(logging.DEBUG, event, *args, **fields)
