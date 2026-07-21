@@ -37,7 +37,20 @@ plugin transcribes (LiteLLM → parakeet → faster-whisper fallback) → emits
 ## Install
 
 ```bash
-# From the repo root after cloning:
+# From GitHub — the /plugin suffix tells Hermes to install from the plugin/ subdirectory
+hermes plugins install youruser/even-g2-hermes-bridge/plugin --enable
+
+# Update to latest after pushing changes
+hermes plugins update even_g2
+
+# Restart the gateway to load the plugin
+hermes gateway restart
+```
+
+Or from a local clone:
+
+```bash
+# From the repo root:
 cd plugin/
 uv sync                                    # creates .venv, installs deps
 uv build                                   # produces wheel + sdist in dist/

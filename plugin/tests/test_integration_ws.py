@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import anyio
 import pytest
 
-from tests.fake_client import FakeGlassesClient, parse_frame
+from fake_client import FakeGlassesClient, parse_frame
 
 if TYPE_CHECKING:
     from types import SimpleNamespace

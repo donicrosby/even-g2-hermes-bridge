@@ -1,0 +1,16 @@
+name: even_g2
+version: 1.0.0
+description: Even Realities G2 smart glasses bridge — full WS protocol with streaming text, voice ASR, and tool-call events
+kind: platform
+provides_hooks:
+  - pre_tool_call
+  - post_tool_call
+requires_env:
+  - EVEN_G2_BRIDGE_TOKEN
+  - name: EVEN_G2_ASR_LITELLM_MODEL
+    description: "LiteLLM model name for Whisper ASR (e.g. 'faster-whisper'). Leave empty to use CPU fallback."
+  - name: EVEN_G2_ASR_LITELLM_BASE_URL
+    description: "LiteLLM base URL for ASR (e.g. https://litellm.local)"
+  - name: EVEN_G2_ASR_LITELLM_API_KEY
+    description: "LiteLLM API key for ASR"
+    secret: true
