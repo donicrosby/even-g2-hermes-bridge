@@ -190,6 +190,9 @@ class EvenG2Adapter(BasePlatformAdapter):
 
     async def connect(self, *, is_reconnect: bool = False) -> bool:  # noqa: ARG002
         """Start the WS server and mark the platform as connected."""
+        from byoa_plugin.hooks import set_adapter
+
+        set_adapter(self)
         self._server = BridgeServer(
             self.cfg,
             self.registry,
