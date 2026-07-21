@@ -1,4 +1,4 @@
-"""Connection registry and StreamState for the even_g2 plugin.
+"""Connection registry and StreamState for the even-g2 plugin.
 
 ConnectionRegistry: maps chat_id → active WebSocket connection. Provides
 thread-safe register/unregister/send_frame operations.

@@ -88,7 +88,7 @@ except ImportError:  # pragma: no cover — only hit outside Hermes runtime
 
 try:
     from gateway.config import Platform  # type: ignore[import-not-found]
-    EVEN_G2 = Platform("even_g2")
+    EVEN_G2 = Platform("even-g2")
 except ImportError:
     class Platform:  # type: ignore[no-redef]
         def __init__(self, name: str) -> None:
@@ -100,7 +100,7 @@ except ImportError:
         def __hash__(self):  # type: ignore[override]
             return hash(self.value)
 
-    EVEN_G2 = Platform("even_g2")
+    EVEN_G2 = Platform("even-g2")
 
 LOG = logging.getLogger("byoa_plugin.adapter")
 
@@ -166,7 +166,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         self._mark_connected()
         advertised = self.cfg.advertised_url
         LOG.info(
-            "even_g2 connected: bind=%s:%s advertised=%s",
+            "even-g2 connected: bind=%s:%s advertised=%s",
             self.cfg.ws_host,
             self.cfg.ws_port,
             advertised,
@@ -178,7 +178,7 @@ class EvenG2Adapter(BasePlatformAdapter):
             await self._server.stop()
             self._server = None
         self._mark_disconnected()
-        LOG.info("even_g2 disconnected")
+        LOG.info("even-g2 disconnected")
 
     # ---- Inbound handlers (called by BridgeServer) ------------------------
 
@@ -193,7 +193,7 @@ class EvenG2Adapter(BasePlatformAdapter):
             chat_id=chat_id,
             text=text,
             message_type=MessageType.TEXT,
-            metadata={"platform": "even_g2", "device": chat_id},
+            metadata={"platform": "even-g2", "device": chat_id},
         )
         self._spawn(self.handle_message(event))
 
@@ -224,7 +224,7 @@ class EvenG2Adapter(BasePlatformAdapter):
             chat_id=chat_id,
             text=text,
             message_type=MessageType.VOICE,
-            metadata={"platform": "even_g2", "device": chat_id, "asr": True},
+            metadata={"platform": "even-g2", "device": chat_id, "asr": True},
         )
         await self.handle_message(event)
 

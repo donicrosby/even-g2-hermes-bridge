@@ -54,7 +54,7 @@ class HttpEndpointHandler:
         body = json.dumps(
             {
                 "status": "ok",
-                "mode": "even_g2",
+                "mode": "even-g2",
                 "bind": f"{self.cfg.ws_host}:{self.cfg.ws_port}",
                 "advertised_url": self.cfg.advertised_url,
                 "token": (

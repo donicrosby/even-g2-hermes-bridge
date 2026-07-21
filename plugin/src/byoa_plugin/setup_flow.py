@@ -1,4 +1,4 @@
-"""Setup flow for the even_g2 plugin.
+"""Setup flow for the even-g2 plugin.
 
 `hermes even-g2 setup`:
   1. Generates EVEN_G2_BRIDGE_TOKEN if missing

@@ -1,4 +1,4 @@
-"""Voice ASR for the even_g2 plugin.
+"""Voice ASR for the even-g2 plugin.
 
 Three backends, tried in order:
   1. LiteLLM Whisper (preferred when EVEN_G2_ASR_LITELLM_MODEL is set) —

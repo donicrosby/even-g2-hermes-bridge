@@ -1,4 +1,4 @@
-"""Network exposure helpers for the even_g2 plugin.
+"""Network exposure helpers for the even-g2 plugin.
 
 Resolves the externally-advertised URL the glasses-app will connect to.
 Priority: explicit EVEN_G2_BRIDGE_PUBLIC_URL → Tailscale MagicDNS → LAN IP.

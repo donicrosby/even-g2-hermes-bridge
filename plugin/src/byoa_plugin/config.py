@@ -1,4 +1,4 @@
-"""Configuration for the even_g2 plugin.
+"""Configuration for the even-g2 plugin.
 
 All settings are env-var-driven for parity with Hermes's env-enablement model.
 `BridgeConfig.from_env()` is the canonical factory.
@@ -17,7 +17,7 @@ def _hermes_home() -> Path:
 
 @dataclass
 class BridgeConfig:
-    """Resolved configuration for the even_g2 plugin."""
+    """Resolved configuration for the even-g2 plugin."""
 
     token: str = ""
     ws_host: str = "127.0.0.1"
@@ -34,7 +34,7 @@ class BridgeConfig:
     asr_litellm_base_url: str = ""
     asr_litellm_api_key: str = ""
     asr_sidecar_bin: str = ""
-    asr_state_path: Path = field(default_factory=lambda: _hermes_home() / "even_g2_asr.json")
+    asr_state_path: Path = field(default_factory=lambda: _hermes_home() / "even-g2_asr.json")
 
     # Allowed users (optional ACL — defaults to allow-all for single-user)
     allowed_users: tuple[str, ...] = ()

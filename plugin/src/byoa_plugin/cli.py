@@ -1,4 +1,4 @@
-"""Hermes CLI commands for the even_g2 plugin.
+"""Hermes CLI commands for the even-g2 plugin.
 
 Registers `hermes even-g2` with subcommands:
   - `hermes even-g2 setup` — generate token + (optional) Tailscale Serve
@@ -26,7 +26,7 @@ LOG = logging.getLogger("byoa_plugin.cli")
 
 def _setup_argparse(subparser: argparse.ArgumentParser) -> None:
     """Build the argparse tree for `hermes even-g2 <subcommand>`."""
-    subs = subparser.add_subparsers(dest="even_g2_command")
+    subs = subparser.add_subparsers(dest="even-g2_command")
 
     setup_p = subs.add_parser("setup", help="Generate bridge token + configure network")
     setup_p.add_argument(
@@ -41,7 +41,7 @@ def _setup_argparse(subparser: argparse.ArgumentParser) -> None:
 
 def _handle_command(args: argparse.Namespace) -> int:
     """Dispatch based on the parsed subcommand."""
-    cmd = getattr(args, "even_g2_command", None)
+    cmd = getattr(args, "even-g2_command", None)
 
     if cmd == "setup":
         return _do_setup(args)
@@ -62,7 +62,7 @@ def _do_setup(args: argparse.Namespace) -> int:
     force = getattr(args, "force_token", False)
     status = run_setup(cfg, force_token=force)
     print()
-    print("  even_g2 setup complete:")
+    print("  even-g2 setup complete:")
     print(f"    bind:        {status['bind']}")
     print(f"    net_mode:    {status['net_mode']}")
     print(f"    public_url:  {status['public_url'] or '(not set)'}")

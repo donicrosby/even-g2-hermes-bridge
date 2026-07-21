@@ -1,6 +1,6 @@
 """Fake glasses-app WebSocket client for plugin integration tests.
 
-Minimal async client speaking the even_g2 wire protocol:
+Minimal async client speaking the even-g2 wire protocol:
   - connect + send hello with a token
   - send text / audio.start / audio.stop / binary / arbitrary frames
   - capture server-pushed responses for assertions

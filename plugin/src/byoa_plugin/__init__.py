@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from byoa_plugin.config import BridgeConfig
 
 
-PLUGIN_NAME = "even_g2"
+PLUGIN_NAME = "even-g2"
 PLUGIN_LABEL = "Even Realities G2"
 PLUGIN_EMOJI = "👓"
 PLUGIN_HINT = (
@@ -93,7 +93,7 @@ def register(ctx: object) -> None:
         import logging
 
         logging.getLogger("byoa_plugin").warning(
-            "even_g2 CLI commands unavailable: %s", e,
+            "even-g2 CLI commands unavailable: %s", e,
         )
 
     # Bind tool-call hooks

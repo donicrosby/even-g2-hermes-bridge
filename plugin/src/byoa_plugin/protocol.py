@@ -1,4 +1,4 @@
-"""Wire protocol for the even_g2 plugin ↔ glasses-app WebSocket.
+"""Wire protocol for the even-g2 plugin ↔ glasses-app WebSocket.
 
 Single source of truth for frame shapes. The build-time script
 `protocol_gen.py` emits `glasses-app/src/protocol.ts` from this file so the

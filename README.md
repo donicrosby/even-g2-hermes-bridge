@@ -8,7 +8,7 @@ Bridge Even Realities G2 smart glasses to a Hermes Agent gateway. Two paths are 
 
 ```
 ┌─────────────┐   WSS (Tailscale Serve or reverse proxy)   ┌──────────────────┐
-│  glasses-app│ ─────── hello + token ────────────────────▶│  even_g2 plugin  │
+│  glasses-app│ ─────── hello + token ────────────────────▶│  even-g2 plugin  │
 │  (on phone) │ ◀── assistant.delta / tool.start/end ───── │  (inside Hermes  │
 └─────────────┘    + binary PCM frames for voice           │   Gateway)       │
                                                    ┌───────┴──────────┐
@@ -45,7 +45,7 @@ cd plugin && uv sync && uv build
 
 # 2. Install into your Hermes Gateway
 hermes plugins install ./plugin/
-hermes plugins enable even_g2
+hermes plugins enable even-g2
 hermes gateway restart
 
 # 3. Configure (generates token, sets up Tailscale Serve)

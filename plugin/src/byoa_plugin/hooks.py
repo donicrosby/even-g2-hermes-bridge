@@ -1,4 +1,4 @@
-"""Tool-call hooks for the even_g2 plugin.
+"""Tool-call hooks for the even-g2 plugin.
 
 Binds pre_tool_call and post_tool_call Hermes Gateway hooks so the
 glasses-app sees `tool.start` / `tool.end` frames while the agent is

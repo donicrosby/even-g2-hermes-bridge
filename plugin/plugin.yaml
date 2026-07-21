@@ -1,4 +1,4 @@
-name: even_g2
+name: even-g2
 version: 1.0.0
 description: Even Realities G2 smart glasses bridge — full WS protocol with streaming text, voice ASR, and tool-call events
 kind: platform

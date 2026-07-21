@@ -1,4 +1,4 @@
-"""WebSocket server for the even_g2 plugin.
+"""WebSocket server for the even-g2 plugin.
 
 Accepts connections from the glasses-app, validates the hello handshake,
 parses inbound frames, and exposes `send_frame()` for pushing outbound

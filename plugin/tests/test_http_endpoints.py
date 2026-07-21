@@ -47,7 +47,7 @@ class TestHealthEndpoint:
         assert resp is not None
         body = json.loads(resp.body.decode("utf-8"))
         assert body["status"] == "ok"
-        assert body["mode"] == "even_g2"
+        assert body["mode"] == "even-g2"
         assert "bind" in body
         assert "advertised_url" in body
         assert "token" in body

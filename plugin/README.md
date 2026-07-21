@@ -1,4 +1,4 @@
-# even_g2 — Hermes platform plugin for Even Realities G2
+# even-g2 — Hermes platform plugin for Even Realities G2
 
 Bridges Even Realities G2 smart glasses to a Hermes Gateway via a persistent
 WebSocket. The glasses-app connects to this plugin's WS server; the plugin
@@ -9,7 +9,7 @@ the same streaming, tools, sessions, and pairing flow as Telegram/Discord.
 
 ```
 ┌─────────────┐   WSS (TLS via Tailscale Serve or user reverse proxy)   ┌──────────────────┐
-│  glasses-app│ ─────────── hello + token ────────────────────────────▶│  even_g2 plugin  │
+│  glasses-app│ ─────────── hello + token ────────────────────────────▶│  even-g2 plugin  │
 │  (on phone) │ ◀── assistant.delta / tool.start/end / turn.done ───── │  (inside Hermes  │
 └─────────────┘    + binary PCM frames (audio.start → audio.stop)      │   Gateway process)│
                                                                    │       │            │
@@ -41,7 +41,7 @@ plugin transcribes (LiteLLM → parakeet → faster-whisper fallback) → emits
 hermes plugins install youruser/even-g2-hermes-bridge/plugin --enable
 
 # Update to latest after pushing changes
-hermes plugins update even_g2
+hermes plugins update even-g2
 
 # Restart the gateway to load the plugin
 hermes gateway restart
@@ -57,7 +57,7 @@ uv build                                   # produces wheel + sdist in dist/
 
 # Install into a Hermes Gateway host:
 hermes plugins install ./plugin/
-hermes plugins enable even_g2
+hermes plugins enable even-g2
 hermes gateway restart
 ```
 
@@ -79,7 +79,7 @@ This command will:
 Other CLI commands:
 
 ```bash
-hermes even-g2 qr       # print QR code to terminal + write ~/.hermes/even_g2_qr.png
+hermes even-g2 qr       # print QR code to terminal + write ~/.hermes/even-g2_qr.png
 hermes even-g2 url      # print the advertised WSS URL only
 ```
 

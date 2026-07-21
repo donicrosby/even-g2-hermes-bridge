@@ -1,4 +1,4 @@
-"""QR code generator for even_g2 plugin bootstrap.
+"""QR code generator for even-g2 plugin bootstrap.
 
 Generates a QR encoding `wss://<host>?token=<token>` so the user can scan
 it from the phone camera to populate the glasses-app's bridge URL + token
@@ -6,7 +6,7 @@ fields without manual entry.
 
 Three render forms:
   - Terminal ASCII/Unicode blocks (printed to stdout)
-  - PNG file (written to ~/.hermes/even_g2_qr.png by default)
+  - PNG file (written to ~/.hermes/even-g2_qr.png by default)
   - HTTP endpoint `GET /qr` (served by the WS server's port)
 """
 
@@ -101,7 +101,7 @@ def print_qr(cfg: BridgeConfig, *, out: Path | None = None) -> str:
     print()
     print(render_terminal(payload))
 
-    png_path = out or (Path.home() / ".hermes" / "even_g2_qr.png")
+    png_path = out or (Path.home() / ".hermes" / "even-g2_qr.png")
     try:
         write_png(payload, png_path)
         print(f"  PNG written to: {png_path}")
