@@ -617,7 +617,9 @@ async function buildPage(): Promise<void> {
     ),
   );
   if (result !== StartUpPageCreateResult.success) {
-    console.error('[Hermes] createStartUpPageContainer failed:', result);
+    log.error('createStartUpPageContainer failed', { result });
+  } else {
+    log.info('createStartUpPageContainer success');
   }
 }
 
