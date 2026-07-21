@@ -37,15 +37,17 @@ import {
 
 // ===== Configuration =======================================================
 
-const BRIDGE_URL =
-  localStorage.getItem('bridge_url') ||
-  import.meta.env.VITE_BRIDGE_URL ||
-  'wss://hermes.your-tailnet.ts.net:8443';
+function getConfig(): { url: string; token: string } {
+  return {
+    url: localStorage.getItem('bridge_url') || '',
+    token: localStorage.getItem('bridge_token') || '',
+  };
+}
 
-const BRIDGE_TOKEN =
-  localStorage.getItem('bridge_token') ||
-  import.meta.env.VITE_BRIDGE_TOKEN ||
-  '';
+function isConfigured(): boolean {
+  const { url, token } = getConfig();
+  return url.length > 0 && token.length > 0;
+}
 
 // ===== Container layout (576×288 canvas) ===================================
 
@@ -160,10 +162,12 @@ function renderSession(): void {
 
 function connect(): void {
   if (ws || authFailed) return;
+  if (!isConfigured()) return;
 
+  const { url, token } = getConfig();
   setStatus('Connecting...');
 
-  const socket = new WebSocket(BRIDGE_URL);
+  const socket = new WebSocket(url);
   socket.binaryType = 'arraybuffer';
   ws = socket;
 
@@ -171,7 +175,7 @@ function connect(): void {
     reconnectAttempts = 0;
     const hello: HelloFrame = {
       t: 'hello',
-      token: BRIDGE_TOKEN,
+      token: token,
       device: 'g2',
     };
     socket.send(JSON.stringify(hello));
@@ -379,6 +383,132 @@ function handleAudioPcm(pcm: Uint8Array): void {
   ws.send(buf);
 }
 
+// ===== Config screen (phone-side, Even design system) ====================
+
+const EVEN_COLORS = {
+  text: '#232323',
+  textDim: '#7B7B7B',
+  bg: '#FFFFFF',
+  surface: '#EEEEEE',
+  inputBg: 'rgba(35,35,35,0.08)',
+  accent: '#FEF991',
+  textOnAccent: '#FFFFFF',
+};
+
+function injectPhoneChrome(): void {
+  if (document.getElementById('hermes-chrome')) return;
+  const chrome = document.createElement('div');
+  chrome.id = 'hermes-chrome';
+  chrome.style.cssText = [
+    'position:fixed', 'bottom:0', 'left:0', 'right:0',
+    'padding:12px 20px', `background:${EVEN_COLORS.bg}`,
+    `border-top:1px solid ${EVEN_COLORS.surface}`,
+    'display:flex', 'justify-content:space-between', 'align-items:center',
+    'z-index:9999', 'font-family:system-ui,sans-serif',
+  ].join(';');
+  chrome.innerHTML = `
+    <span style="font-size:13px;color:${EVEN_COLORS.textDim}">Hermes Bridge</span>
+    <button id="hermes-settings-btn" style="background:none;border:none;cursor:pointer;
+      color:${EVEN_COLORS.text};font-size:14px;font-weight:500;font-family:inherit">
+      Settings
+    </button>`;
+  document.body.appendChild(chrome);
+  document.getElementById('hermes-settings-btn')?.addEventListener('click', showConfigScreen);
+}
+
+function showConfigScreen(): void {
+  const hasExisting = isConfigured();
+
+  if (bridge) {
+    void upgradeText(ASSISTANT_CID, ASSISTANT_CNAME,
+      hasExisting ? 'Settings opened on phone.' : 'Enter bridge details on your phone.');
+  }
+
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+
+  const existing = getConfig();
+  const inputStyle = [
+    'width:100%', 'padding:12px 16px', 'font-size:16px',
+    `background:${EVEN_COLORS.inputBg}`, `color:${EVEN_COLORS.text}`,
+    'border:none', 'border-radius:8px',
+    'box-sizing:border-box', 'margin:0 0 16px',
+    'font-family:inherit',
+  ].join(';');
+
+  const btnBase = [
+    'padding:12px 24px', 'font-size:16px', 'font-weight:600',
+    'border:none', 'border-radius:8px', 'cursor:pointer', 'font-family:inherit',
+  ].join(';');
+
+  const form = document.createElement('div');
+  form.style.cssText = [
+    'position:fixed', 'top:0', 'left:0', 'right:0', 'bottom:0',
+    `background:${EVEN_COLORS.bg}`, 'padding:20px',
+    'overflow-y:auto', 'z-index:10000', 'font-family:system-ui,sans-serif',
+  ].join(';');
+  form.innerHTML = `
+    <div style="max-width:420px;margin:0 auto;padding-top:24px">
+      <h2 style="margin:0 0 4px;font-size:24px;font-weight:600;color:${EVEN_COLORS.text};letter-spacing:-0.02em">
+        ${hasExisting ? 'Bridge Settings' : 'Bridge Setup'}
+      </h2>
+      <p style="margin:0 0 24px;font-size:16px;color:${EVEN_COLORS.textDim}">
+        ${hasExisting ? 'Edit your bridge connection.' : 'Enter your bridge server details.'}
+      </p>
+      <label style="display:block;font-size:11px;font-weight:500;text-transform:uppercase;
+        letter-spacing:0.04em;color:${EVEN_COLORS.textDim};margin:0 0 4px">Bridge URL</label>
+      <input id="hermes-url" type="text" value="${existing.url}" placeholder="wss://your-host:8443" style="${inputStyle}" />
+      <label style="display:block;font-size:11px;font-weight:500;text-transform:uppercase;
+        letter-spacing:0.04em;color:${EVEN_COLORS.textDim};margin:0 0 4px">Token</label>
+      <input id="hermes-token" type="password" value="${existing.token}" placeholder="bridge token" style="${inputStyle}" />
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="hermes-save-btn" style="${btnBase};background:${EVEN_COLORS.accent};color:${EVEN_COLORS.textOnAccent}">
+          ${hasExisting ? 'Save & Reconnect' : 'Connect'}
+        </button>
+        ${hasExisting ? `<button id="hermes-cancel-btn" style="${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text}">Cancel</button>` : ''}
+      </div>
+      <p id="hermes-error" style="color:#c33;margin-top:12px;font-size:14px;display:none"></p>
+    </div>`;
+  document.body.appendChild(form);
+
+  const saveBtn = document.getElementById('hermes-save-btn');
+  const cancelBtn = document.getElementById('hermes-cancel-btn');
+  const errEl = document.getElementById('hermes-error');
+
+  function showErr(msg: string): void {
+    if (errEl) {
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    }
+  }
+
+  saveBtn?.addEventListener('click', () => {
+    const urlInput = document.getElementById('hermes-url') as HTMLInputElement | null;
+    const tokenInput = document.getElementById('hermes-token') as HTMLInputElement | null;
+    const urlVal = urlInput?.value?.trim() || '';
+    const tokenVal = tokenInput?.value?.trim() || '';
+
+    if (!urlVal || !tokenVal) {
+      showErr('Both URL and token are required.');
+      return;
+    }
+    if (!urlVal.startsWith('ws://') && !urlVal.startsWith('wss://')) {
+      showErr('URL must start with ws:// or wss://');
+      return;
+    }
+
+    localStorage.setItem('bridge_url', urlVal);
+    localStorage.setItem('bridge_token', tokenVal);
+    location.reload();
+  });
+
+  cancelBtn?.addEventListener('click', () => {
+    form.remove();
+  });
+}
+
 // ===== Page bootstrap ======================================================
 
 async function buildPage(): Promise<void> {
@@ -474,8 +604,15 @@ async function init(): Promise<void> {
   bridge = await waitForEvenAppBridge();
   console.warn('[Hermes] Bridge ready');
 
+  if (!isConfigured()) {
+    await buildPage();
+    showConfigScreen();
+    return;
+  }
+
   await restoreState();
   await buildPage();
+  injectPhoneChrome();
   registerEventHandler();
   connect();
 }
