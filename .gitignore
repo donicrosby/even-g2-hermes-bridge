@@ -18,6 +18,24 @@ dist/
 .env
 .env.*
 
+# Tool caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.codegraph/
+
+# Agent session data
+.omo/
+.opencode/
+
+# Logs
+*.log
+
+# Editor backups
+*~
+*.swp
+*.swo
+
 # IDE
 .vscode/
 .idea/
