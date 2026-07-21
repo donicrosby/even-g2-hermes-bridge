@@ -572,22 +572,21 @@ function showConfigScreen(): void {
 
   logsCopy?.addEventListener('click', () => {
     const text = getLogBuffer().join('\n');
-    const btn = logsCopy;
-    navigator.clipboard.writeText(text).then(() => {
-      if (btn) btn.textContent = 'Copied!';
-      setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 2000);
-    }).catch(() => {
-      if (logsPanel) {
-        const range = document.createRange();
-        range.selectNodeContents(logsPanel);
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-        document.execCommand('copy');
-        if (btn) btn.textContent = 'Copied!';
-        setTimeout(() => { if (btn) btn.textContent = 'Copy'; }, 2000);
-      }
-    });
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+      if (logsCopy) logsCopy.textContent = 'Copied!';
+    } catch {
+      if (logsCopy) logsCopy.textContent = 'Copy failed';
+    }
+    document.body.removeChild(ta);
+    setTimeout(() => { if (logsCopy) logsCopy.textContent = 'Copy'; }, 2000);
   });
 }
 
