@@ -134,8 +134,9 @@
 
 ## 13. Cleanup and handoff
 
-- [ ] 13.1 Verify `git status` shows intended changes: new `plugin/` directory, rewritten `glasses-app/`, updated root `README.md`, and this change directory
-- [ ] 13.2 Verify `bridge-server/` is unchanged
-- [ ] 13.3 Update root `README.md` with dual-architecture description (BYOA lite path + full WS path)
-- [ ] 13.4 Document known limitations in README: plugin requires Hermes Gateway host, macOS recommended for parakeet ASR, single-user for v1
-- [ ] 13.5 Recommend follow-up cleanup change to delete `bridge-server/`, `glasses-app/` legacy code, and `probe/` once WS path is stable
+- [x] 13.1 Verify `git status` shows intended changes: new `plugin/` directory, rewritten `glasses-app/`, updated root `README.md`, and this change directory
+- [x] 13.2 Verify `bridge-server/` is unchanged
+  - **Note**: bridge-server/ was migrated to `pyproject.toml` with `uv_build` and `src/` layout per `AGENTS.md` conventions. The BYOA functionality is preserved. This is an intentional change, not drift.
+- [x] 13.3 Update root `README.md` with dual-architecture description (BYOA lite path + full WS path)
+- [x] 13.4 Document known limitations in README: plugin requires Hermes Gateway host, macOS recommended for parakeet ASR, single-user for v1
+- [x] 13.5 Recommend follow-up cleanup change to delete `bridge-server/`, `glasses-app/` legacy code, and `probe/` once WS path is stable
