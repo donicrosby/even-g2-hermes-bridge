@@ -251,24 +251,34 @@ class EvenG2Adapter(BasePlatformAdapter):
         await self.handle_message(event)
 
     def _on_sessions_list(self, chat_id: str) -> None:
-        self._spawn(self._send_sessions_list(chat_id))
-
-    async def _send_sessions_list(self, chat_id: str) -> None:
-        # Minimal v1: we don't yet query the gateway's session list.
-        # Emit an empty sessions frame so the glasses-app doesn't hang.
-        active = self._session_by_chat.get(chat_id)
-        await self.registry.send_frame(
-            chat_id, proto.sessions([], active=active),
+        """Forward /sessions command to the gateway."""
+        event = MessageEvent(
+            chat_id=chat_id,
+            text="/sessions",
+            message_type=MessageType.TEXT,
+            metadata={"platform": "even-g2", "device": chat_id},
         )
+        self._spawn(self.handle_message(event))
 
     def _on_sessions_switch(self, chat_id: str, target: str) -> None:
-        LOG.info("sessions.switch chat_id=%s target=%s (no-op in v1)", chat_id, target)
-        # v1: we accept the frame but don't yet implement switching.
-        # The gateway exposes session switching via a different API; we'll
-        # wire it in once we know the right call.
+        """Forward /resume command to the gateway."""
+        event = MessageEvent(
+            chat_id=chat_id,
+            text=f"/resume {target}",
+            message_type=MessageType.TEXT,
+            metadata={"platform": "even-g2", "device": chat_id},
+        )
+        self._spawn(self.handle_message(event))
 
     def _on_sessions_new(self, chat_id: str) -> None:
-        LOG.info("sessions.new chat_id=%s (no-op in v1)", chat_id)
+        """Forward /new command to the gateway."""
+        event = MessageEvent(
+            chat_id=chat_id,
+            text="/new",
+            message_type=MessageType.TEXT,
+            metadata={"platform": "even-g2", "device": chat_id},
+        )
+        self._spawn(self.handle_message(event))
 
     def _on_stop(self, chat_id: str) -> None:
         LOG.info("stop chat_id=%s (interrupt requested)", chat_id)
