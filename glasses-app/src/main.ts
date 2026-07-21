@@ -293,7 +293,6 @@ function handleHelloOk(frame: HelloOkFrame): void {
 function handleAssistantDelta(frame: AssistantDeltaFrame): void {
   accumulatedAssistantText = frame.text || '';
   renderAssistant();
-  void maybeBringToFront();
 }
 
 function handleAssistantFull(frame: AssistantFullFrame): void {
