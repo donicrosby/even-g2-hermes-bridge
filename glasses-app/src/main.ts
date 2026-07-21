@@ -29,6 +29,7 @@ import type {
 import { truncateSessionName } from './lib/session';
 import { nextBackoffDelay } from './lib/reconnect';
 import { createBridgeQueue } from './lib/bridge';
+import { log } from './log';
 import {
   serializeState,
   parseState,
@@ -180,6 +181,7 @@ function connect(): void {
 
   const { url, token } = getConfig();
   setStatus('Connecting...');
+  log.info('ws_opening', { url });
 
   const socket = new WebSocket(url);
   socket.binaryType = 'arraybuffer';
@@ -187,28 +189,43 @@ function connect(): void {
 
   socket.onopen = () => {
     reconnectAttempts = 0;
+    log.info('ws_open', { url });
     const hello: HelloFrame = {
       t: 'hello',
       token: token,
       device: 'g2',
     };
     socket.send(JSON.stringify(hello));
+    log.info('frame', { direction: 'out', frame_type: 'hello', byte_size: JSON.stringify(hello).length });
   };
 
   socket.onmessage = (ev) => {
-    if (ev.data instanceof ArrayBuffer) return;
+    if (ev.data instanceof ArrayBuffer) {
+      log.debug('frame', { direction: 'in', frame_type: 'binary', byte_size: ev.data.byteLength });
+      return;
+    }
     try {
       const parsed: unknown = JSON.parse(ev.data as string);
       if (parsed && typeof parsed === 'object') {
-        handleFrame(parsed as Record<string, unknown>);
+        const frameObj = parsed as Record<string, unknown>;
+        log.info('frame', {
+          direction: 'in',
+          frame_type: String(frameObj.t ?? 'unknown'),
+          byte_size: (ev.data as string).length,
+        });
+        handleFrame(frameObj);
       }
     } catch (e) {
-      console.warn('[Hermes] Bad JSON frame:', e);
+      log.warn('frame_decode_error', {
+        byte_size: typeof ev.data === 'string' ? ev.data.length : 0,
+        error: e instanceof Error ? e.message : String(e),
+      });
     }
   };
 
   socket.onclose = (ev) => {
     ws = null;
+    log.info('ws_close', { code: ev.code, reason: ev.reason, was_clean: ev.wasClean });
 
     if (ev.code === 1008) {
       authFailed = true;
@@ -234,7 +251,13 @@ function scheduleReconnect(): void {
 
 function sendFrame(frame: OutboundClientFrame): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(frame));
+    const text = JSON.stringify(frame);
+    ws.send(text);
+    log.info('frame', {
+      direction: 'out',
+      frame_type: String(frame.t),
+      byte_size: text.length,
+    });
   }
 }
 

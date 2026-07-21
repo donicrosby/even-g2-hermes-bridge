@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hmac
-import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -28,6 +27,7 @@ from websockets.exceptions import ConnectionClosed
 
 from byoa_plugin import protocol as proto
 from byoa_plugin.http_endpoints import HttpEndpointHandler
+from byoa_plugin.log import get_logger
 
 if TYPE_CHECKING:
     from websockets.asyncio.server import ServerConnection
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from byoa_plugin.config import BridgeConfig
     from byoa_plugin.connections import ConnectionRegistry
 
-LOG = logging.getLogger("byoa_plugin.server")
+LOG = get_logger("byoa_plugin.server")
 
 # Cap accumulated PCM bytes per turn (~8 MiB ≈ 4 minutes of 16kHz mono s16).
 MAX_PCM_BYTES = 8 * 1024 * 1024
@@ -122,36 +122,81 @@ class BridgeServer:
         chat_id: str | None = None
         ping_task: asyncio.Task[None] | None = None
 
+        async def send_frame(frame_str: str, frame_type: str) -> None:
+            """Send + log an outbound text frame to the current connection."""
+            await ws.send(frame_str)
+            LOG.info(
+                "frame",
+                direction="out",
+                frame_type=frame_type,
+                byte_size=len(frame_str),
+                chat_id=chat_id,
+            )
+
         try:
+            LOG.info("ws_open", chat_id=None)
             # ----- Phase 1: hello handshake -----
             try:
                 first = await ws.recv()
             except ConnectionClosed:
+                LOG.info("normal_close", chat_id=None, reason="client_gone_before_hello")
                 return
             if isinstance(first, bytes):
+                LOG.warning(
+                    "auth_failed",
+                    chat_id=None,
+                    reason="wrong_first_frame",
+                    detail="first frame was binary; expected text hello",
+                )
                 await ws.close(code=1002, reason="expected hello text frame")
                 return
             try:
                 hello = proto.parse_client(first)
-            except ValueError:
+            except ValueError as e:
+                LOG.warning(
+                    "auth_failed",
+                    chat_id=None,
+                    reason="malformed_hello",
+                    detail=str(e),
+                    byte_size=len(first),
+                )
                 await ws.close(code=1002, reason="malformed hello")
                 return
             if hello.get("t") != "hello":
+                LOG.warning(
+                    "auth_failed",
+                    chat_id=None,
+                    reason="wrong_first_frame",
+                    detail=f"first frame t={hello.get('t')!r}",
+                )
                 await ws.close(code=1002, reason="expected hello first")
                 return
 
             client_token = hello.get("token", "")
+            chat_id_candidate = str(hello.get("device") or "g2")
+            LOG.info(
+                "hello_received",
+                chat_id=chat_id_candidate,
+                has_token=bool(client_token),
+                byte_size=len(first),
+            )
+
             expected = self.cfg.token
             if not isinstance(client_token, str) or not hmac.compare_digest(
                 client_token, expected,
             ):
-                LOG.warning("auth rejected: bad token")
+                LOG.warning(
+                    "auth_failed",
+                    chat_id=chat_id_candidate,
+                    reason="bad_token",
+                )
                 await ws.close(code=1008, reason="unauthorized")
                 return
 
-            chat_id = str(hello.get("device") or "g2")
+            LOG.info("auth_check", chat_id=chat_id_candidate, result="success")
+            chat_id = chat_id_candidate
             await self.registry.register(chat_id, ws)
-            LOG.info("hello ok: chat_id=%s", chat_id)
+            LOG.info("registered", chat_id=chat_id)
 
             active = (
                 self._active_session_lookup(chat_id)
@@ -159,19 +204,30 @@ class BridgeServer:
                 else None
             )
             caps = ["text", "voice", "tool-events", "sessions", "streaming"]
-            await ws.send(proto.hello_ok(active=active, caps=caps))
+            await send_frame(proto.hello_ok(active=active, caps=caps), "hello.ok")
 
             # ----- Phase 2: frame dispatch loop -----
+            LOG.info("dispatch_loop_enter", chat_id=chat_id)
             audio_buf = bytearray()
             capturing = False
             ping_task = asyncio.create_task(self._ping_loop(ws, chat_id))
             async for raw in ws:
                 if isinstance(raw, (bytes, bytearray, memoryview)):
+                    LOG.debug(
+                        "frame",
+                        direction="in",
+                        frame_type="binary",
+                        byte_size=len(raw),
+                        chat_id=chat_id,
+                        capturing=capturing,
+                    )
                     if capturing:
                         if len(audio_buf) + len(raw) > MAX_PCM_BYTES:
                             LOG.warning(
-                                "PCM cap hit for chat_id=%s; truncating",
-                                chat_id,
+                                "pcm_cap_hit",
+                                chat_id=chat_id,
+                                byte_size=len(raw),
+                                cap=MAX_PCM_BYTES,
                             )
                             audio_buf.extend(bytes(raw)[: MAX_PCM_BYTES - len(audio_buf)])
                             capturing = False
@@ -179,18 +235,34 @@ class BridgeServer:
                             audio_buf.extend(raw)
                     else:
                         LOG.debug(
-                            "ignoring binary frame outside audio capture (chat_id=%s)",
-                            chat_id,
+                            "binary_frame_outside_capture",
+                            chat_id=chat_id,
+                            byte_size=len(raw),
                         )
                     continue
 
                 try:
                     frame = proto.parse_client(raw)
                 except ValueError as e:
-                    LOG.warning("malformed frame from chat_id=%s: %s", chat_id, e)
+                    LOG.warning(
+                        "frame_decode_error",
+                        chat_id=chat_id,
+                        byte_size=len(raw),
+                        error=str(e),
+                        first_32_bytes_hex=raw[:32].hex() if isinstance(raw, str) else "",
+                    )
                     continue
 
-                match frame.get("t"):
+                frame_type = frame.get("t", "unknown")
+                LOG.info(
+                    "frame",
+                    direction="in",
+                    frame_type=frame_type,
+                    byte_size=len(raw),
+                    chat_id=chat_id,
+                )
+
+                match frame_type:
                     case "text":
                         text_content = str(frame.get("text", ""))
                         if self._on_text:
@@ -198,15 +270,15 @@ class BridgeServer:
                     case "audio.start":
                         audio_buf.clear()
                         capturing = True
-                        LOG.debug("audio capture started chat_id=%s", chat_id)
+                        LOG.debug("audio_capture_start", chat_id=chat_id)
                     case "audio.stop":
                         capturing = False
                         pcm = bytes(audio_buf)
                         audio_buf.clear()
                         LOG.debug(
-                            "audio capture stopped chat_id=%s bytes=%d",
-                            chat_id,
-                            len(pcm),
+                            "audio_capture_stop",
+                            chat_id=chat_id,
+                            pcm_bytes=len(pcm),
                         )
                         if self._on_audio_stop:
                             self._on_audio_stop(chat_id, pcm)
@@ -225,12 +297,26 @@ class BridgeServer:
                             self._on_stop(chat_id)
                     case unknown_t:
                         LOG.warning(
-                            "unknown frame type %r from chat_id=%s", unknown_t, chat_id,
+                            "unknown_frame_type",
+                            chat_id=chat_id,
+                            frame_type=unknown_t,
                         )
-        except ConnectionClosed:
-            pass
-        except Exception:
-            LOG.exception("handler crashed for chat_id=%s", chat_id)
+            LOG.info("dispatch_loop_exit", chat_id=chat_id)
+        except ConnectionClosed as e:
+            LOG.info(
+                "abnormal_close",
+                chat_id=chat_id,
+                code=getattr(e, "code", None),
+                reason=getattr(e, "reason", None),
+            )
+        except Exception as e:
+            LOG.exception(
+                "handler_crash",
+                chat_id=chat_id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise
         finally:
             if ping_task is not None:
                 ping_task.cancel()
@@ -238,7 +324,7 @@ class BridgeServer:
                     await ping_task
             if chat_id is not None:
                 await self.registry.unregister(chat_id, ws)
-            LOG.debug("handler exited chat_id=%s", chat_id)
+            LOG.info("handler_exit", chat_id=chat_id)
 
     async def _ping_loop(self, ws: ServerConnection, chat_id: str) -> None:
         """Send periodic text-level keepalives while the socket is open."""
