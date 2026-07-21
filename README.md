@@ -19,7 +19,7 @@ Bridge Even Realities G2 smart glasses to a Hermes Agent gateway. Two paths are 
 ```
 
 - **`plugin/`** — Hermes platform plugin: WS server (port 8767), connection registry, streaming text via `assistant.delta` frames, voice ASR (LiteLLM → faster-whisper fallback), tool-call hooks, session management, QR setup, Tailscale Serve integration. See `plugin/README.md` for install + config.
-- **`glasses-app/`** — TypeScript glasses-app using the Even Hub SDK: three text containers (assistant reply + status + session name), touch handlers (tap=toggle mic, double-tap=interrupt, scroll=switch session), audio streaming, background state persistence, exponential backoff reconnect.
+- **`glasses-app/`** — TypeScript glasses-app using the Even Hub SDK: three text containers (assistant reply + status + session name), touch handlers (tap=toggle mic, double-tap=exit dialog (system confirmation), scroll=switch session), audio streaming, background state persistence, exponential backoff reconnect.
 
 ### Path B: BYOA lite (legacy)
 
