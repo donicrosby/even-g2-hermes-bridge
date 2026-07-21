@@ -203,6 +203,15 @@ class EvenG2Adapter(BasePlatformAdapter):
         )
         await self._server.start()
         self._mark_connected()
+
+        LOG.info(
+            "connect state: _message_handler=%s gateway_runner=%s",
+            self._message_handler is not None,
+            getattr(self, "gateway_runner", None) is not None,
+        )
+        if self.gateway_runner and not self._message_handler:
+            LOG.info("wiring _message_handler from gateway_runner._handle_message")
+            self.set_message_handler(self.gateway_runner._handle_message)
         advertised = self.cfg.advertised_url
         LOG.info(
             "even-g2 connected: bind=%s:%s advertised=%s",
