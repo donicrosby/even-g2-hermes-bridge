@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 import anyio
 import pytest
-
 from fake_client import FakeGlassesClient, parse_frame
 
 if TYPE_CHECKING:

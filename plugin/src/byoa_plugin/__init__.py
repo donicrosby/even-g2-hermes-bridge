@@ -11,6 +11,7 @@ import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from byoa_plugin.adapter import EvenG2Adapter
     from byoa_plugin.config import BridgeConfig
 
 
@@ -52,10 +53,11 @@ def check_fn() -> bool:
     return bool(os.getenv("EVEN_G2_BRIDGE_TOKEN", "").strip())
 
 
-def adapter_factory(cfg: BridgeConfig):  # type: ignore[name-defined]
-    """Construct the EvenG2Adapter. Imported lazily so that the plugin module
-    can be loaded (for env_enablement, check_fn) without pulling the full
-    websockets/faster-whisper dep tree on every gateway status call.
+def adapter_factory(cfg: BridgeConfig) -> EvenG2Adapter:
+    """Construct the EvenG2Adapter.
+
+    Imported lazily so the plugin module can be loaded (for env_enablement,
+    check_fn) without pulling the full websockets/faster-whisper dep tree.
     """
     from byoa_plugin.adapter import EvenG2Adapter
 
@@ -86,8 +88,8 @@ def register(ctx: object) -> None:
         from byoa_plugin.cli import register_cli
 
         register_cli(ctx)
-    except ImportError as e:
-        # Optional commands; missing deps shouldn't break plugin registration.
+    except Exception as e:  # noqa: BLE001  # fault isolation — CLI can't break plugin load
+        # CLI commands are optional; don't let a CLI issue break plugin registration.
         import logging
 
         logging.getLogger("byoa_plugin").warning(

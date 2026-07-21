@@ -44,6 +44,7 @@ convention = "google"
     "ARG002",    # test methods take fixture params they may not reference
     "ARG005",    # lambdas in mock stubs often ignore args
     "PLC0415",   # tests use deferred imports so reset_env runs first
+    "INP001",    # tests/ is not a package (removed __init__.py for pytest compat with plugin/__init__.py)
     "D100",      # tests don't need module-level docstrings (file docstring is enough)
     "D101",      # TestX classes self-document via name
     "D102",      # test_ methods self-document via name
