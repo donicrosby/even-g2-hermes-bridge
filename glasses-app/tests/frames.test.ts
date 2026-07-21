@@ -7,6 +7,7 @@ const initialState: GlassesAppState = {
   currentSessionId: '',
   currentSessionName: '',
   lastTranscript: '',
+  knownSessions: [],
 };
 
 function effectKinds(effects: readonly Effect[]): string[] {

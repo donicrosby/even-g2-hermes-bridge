@@ -16,6 +16,7 @@ import type {
   AudioStopFrame,
   SimpleInboundFrame,
   SessionsSwitchFrame,
+  SessionsFrame,
   HelloOkFrame,
   AssistantDeltaFrame,
   AssistantFullFrame,
@@ -34,6 +35,7 @@ import {
   mergeState,
   STATE_KEY,
   type GlassesAppState,
+  type SessionItem,
 } from './lib/state';
 
 // ===== Configuration =======================================================
@@ -86,6 +88,7 @@ let currentSessionName = '';
 let isCapturing = false;
 let backgrounded = false;
 let lastTranscript = '';
+let knownSessions: SessionItem[] = [];
 
 let unsubscribeEvents: (() => void) | null = null;
 let cleanupDone = false;
@@ -117,6 +120,7 @@ function currentMutableState(): GlassesAppState {
     currentSessionId,
     currentSessionName,
     lastTranscript,
+    knownSessions,
   };
 }
 
@@ -261,6 +265,9 @@ function handleFrame(frame: Record<string, unknown>): void {
     case 'tool.end':
       handleToolEnd(frame as unknown as ToolEndFrame);
       break;
+    case 'sessions':
+      handleSessions(frame as unknown as SessionsFrame);
+      break;
     case 'transcript':
       handleTranscript(frame as unknown as TranscriptFrame);
       break;
@@ -285,6 +292,7 @@ function handleHelloOk(frame: HelloOkFrame): void {
     renderSession();
     scheduleSave();
   }
+  sendFrame({ t: 'sessions.list' });
 }
 
 function handleAssistantDelta(frame: AssistantDeltaFrame): void {
@@ -324,6 +332,17 @@ function handleActive(frame: ActiveFrame): void {
   currentSessionName = ('name' in frame && frame.name) || frame.id;
   renderSession();
   scheduleSave();
+}
+
+function handleSessions(frame: SessionsFrame): void {
+  knownSessions = frame.items ?? [];
+  if (frame.active && frame.active !== currentSessionId) {
+    currentSessionId = frame.active;
+    const match = knownSessions.find((s) => s.id === frame.active);
+    currentSessionName = (match && match.name) || frame.active;
+    renderSession();
+    scheduleSave();
+  }
 }
 
 function handleError(frame: ErrorFrame): void {

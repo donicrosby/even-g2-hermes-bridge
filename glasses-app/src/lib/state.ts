@@ -7,12 +7,19 @@
  * JSON shape so encode/decode can be tested independently of the bridge.
  */
 
+/** Item shape mirroring SessionsFrame.items from protocol.ts. */
+export type SessionItem = {
+  id: string;
+  name?: string;
+};
+
 /** Mutable state tracked across background transitions. */
 export type GlassesAppState = {
   accumulatedAssistantText: string;
   currentSessionId: string;
   currentSessionName: string;
   lastTranscript: string;
+  knownSessions: SessionItem[];
 };
 
 export const STATE_KEY = 'glassesAppState';
@@ -33,6 +40,7 @@ export function serializeState(state: GlassesAppState): string {
     currentSessionId: state.currentSessionId,
     currentSessionName: state.currentSessionName,
     lastTranscript: state.lastTranscript,
+    knownSessions: state.knownSessions,
   });
 }
 
@@ -67,5 +75,6 @@ export function mergeState(
     currentSessionId: snapshot.currentSessionId ?? target.currentSessionId,
     currentSessionName: snapshot.currentSessionName ?? target.currentSessionName,
     lastTranscript: snapshot.lastTranscript ?? target.lastTranscript,
+    knownSessions: snapshot.knownSessions ?? target.knownSessions,
   };
 }

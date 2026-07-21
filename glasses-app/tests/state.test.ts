@@ -12,6 +12,7 @@ const empty: GlassesAppState = {
   currentSessionId: '',
   currentSessionName: '',
   lastTranscript: '',
+  knownSessions: [],
 };
 
 const populated: GlassesAppState = {
@@ -19,6 +20,7 @@ const populated: GlassesAppState = {
   currentSessionId: 'sess-1',
   currentSessionName: 'First chat',
   lastTranscript: 'hi there',
+  knownSessions: [{ id: 'sess-1', name: 'First chat' }],
 };
 
 describe('serializeState', () => {
