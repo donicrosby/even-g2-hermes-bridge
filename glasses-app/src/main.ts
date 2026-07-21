@@ -665,20 +665,28 @@ function registerEventHandler(): void {
 }
 
 async function init(): Promise<void> {
+  log.info('init_start');
   bridge = await waitForEvenAppBridge();
-  console.warn('[Hermes] Bridge ready');
+  log.info('bridge_ready');
 
   if (!isConfigured()) {
+    log.info('init_not_configured — showing config screen');
     await buildPage();
     showConfigScreen();
     return;
   }
 
+  log.info('init_configured — restoring state + connecting');
   await restoreState();
+  log.info('state_restored');
   await buildPage();
+  log.info('page_built');
   injectPhoneChrome();
+  log.info('chrome_injected');
   registerEventHandler();
+  log.info('events_registered');
   connect();
+  log.info('connect_called');
 }
 
 function cleanupAndExit(): void {
@@ -705,5 +713,8 @@ function cleanupAndExit(): void {
 }
 
 init().catch((e) => {
-  console.error('[Hermes] Init failed:', e);
+  log.error('init_failed', {
+    error: e instanceof Error ? e.message : String(e),
+    stack: e instanceof Error ? e.stack : undefined,
+  });
 });

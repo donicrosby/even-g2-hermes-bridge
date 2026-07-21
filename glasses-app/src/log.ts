@@ -5,7 +5,22 @@
 type LogFields = Record<string, unknown>;
 
 const MAX_ENTRIES = 200;
+const STORAGE_KEY = 'hermes_log_buffer';
 const logBuffer: string[] = [];
+
+try {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    const parsed: unknown = JSON.parse(stored);
+    if (Array.isArray(parsed)) logBuffer.push(...parsed.filter((e): e is string => typeof e === 'string'));
+  }
+} catch { /* ignore */ }
+
+function persist(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(logBuffer));
+  } catch { /* ignore quota errors */ }
+}
 
 function emit(level: string, event: string, fields: LogFields): void {
   const entry = {
@@ -19,6 +34,7 @@ function emit(level: string, event: string, fields: LogFields): void {
   console.log(line);
   logBuffer.push(line);
   if (logBuffer.length > MAX_ENTRIES) logBuffer.shift();
+  persist();
 }
 
 export function getLogBuffer(): string[] {
