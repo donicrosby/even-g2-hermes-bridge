@@ -9,12 +9,26 @@
   "permissions": [
     {
       "name": "network",
-      "desc": "WebSocket connection to bridge server.",
-      "whitelist": ["wss://hermes.local", "ws://hermes.local", "wss://192.168.1.100"]
+      "desc": "WebSocket connection to the even_g2 plugin bridge server (Tailscale, LAN, or reverse proxy).",
+      "whitelist": [
+        "wss://*.ts.net",
+        "wss://*.home.arpa",
+        "ws://*.home.arpa",
+        "wss://*.local",
+        "ws://*.local",
+        "wss://192.168.*.*",
+        "ws://192.168.*.*",
+        "wss://10.*.*.*",
+        "ws://10.*.*.*"
+      ]
     },
     {
       "name": "g2-microphone",
-      "desc": "Voice input from G2 glasses."
+      "desc": "Voice input from G2 glasses (primary ASR path)."
+    },
+    {
+      "name": "phone-microphone",
+      "desc": "Voice input fallback when G2 microphone is unavailable."
     }
   ],
   "supported_languages": ["en"]
