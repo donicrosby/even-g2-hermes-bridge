@@ -532,10 +532,13 @@ function showConfigScreen(): void {
   function refreshLogs(): void {
     if (!logsPanel) return;
     const entries = getLogBuffer();
+    const wasNearBottom = logsPanel.scrollHeight - logsPanel.scrollTop - logsPanel.clientHeight < 80;
     logsPanel.textContent = entries.length > 0
       ? entries.join('\n')
       : '(no logs yet)';
-    logsPanel.scrollTop = logsPanel.scrollHeight;
+    if (wasNearBottom) {
+      logsPanel.scrollTop = logsPanel.scrollHeight;
+    }
   }
 
   logsBtn?.addEventListener('click', () => {
