@@ -93,8 +93,8 @@ class BridgeServer:
             # Defaults are fine: max_size 1 MiB is too small for PCM bursts,
             # so bump to MAX_PCM_BYTES + headroom.
             max_size=MAX_PCM_BYTES + 65536,
-            ping_interval=None,  # we send our own text-level keepalives
-            ping_timeout=None,
+            ping_interval=20,
+            ping_timeout=10,
             # Tight close handshake timeout so shutdown isn't held up by
             # clients that disappear without ACKing the close frame.
             close_timeout=2.0,

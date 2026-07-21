@@ -8,6 +8,7 @@ import {
   TextContainerProperty,
   TextContainerUpgrade,
   CreateStartUpPageContainer,
+  RebuildPageContainer,
 } from '@evenrealities/even_hub_sdk';
 
 import {
@@ -645,7 +646,15 @@ async function buildPage(): Promise<void> {
   if (result === StartUpPageCreateResult.success) {
     log.info('createStartUpPageContainer success');
   } else {
-    log.info('createStartUpPageContainer returned non-success, containers from previous session still active', { result: Number(result) });
+    log.info('createStartUpPageContainer failed, rebuilding', { result: Number(result) });
+    try {
+      await bridge.rebuildPageContainer(
+        new RebuildPageContainer(containers),
+      );
+      log.info('rebuildPageContainer success');
+    } catch (e) {
+      log.error('rebuildPageContainer failed', { error: String(e) });
+    }
   }
 }
 
