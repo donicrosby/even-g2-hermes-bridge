@@ -1,23 +1,24 @@
-# -- Builder stage for webrtcvad compilation --------------------------------------
-FROM python:3.12-slim-bookworm AS builder
-WORKDIR /build
-RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir uv
-COPY requirements.txt .
-RUN uv pip install --system --no-cache-dir -r requirements.txt
-
-# -- Runtime stage ----------------------------------------------------------------
 FROM python:3.12-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir uv
+
 WORKDIR /app
-RUN groupadd -r hermes && useradd -r -g hermes hermes
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-RUN pip install --no-cache-dir setuptools
-COPY main.py .
-COPY test-client.html .
-COPY certs/root_ca.crt /etc/hermes-bridge/certs/root_ca.crt
-RUN chown -R hermes:hermes /app /etc/hermes-bridge
+RUN groupadd -r hermes && useradd -r -g hermes -m -d /home/hermes hermes
+
+COPY pyproject.toml uv.lock ./
+COPY src ./src
+RUN uv sync --frozen --no-dev
+
+ENV PATH="/app/.venv/bin:${PATH}"
+ENV UV_CACHE_DIR=/home/hermes/.cache/uv
+
+RUN chown -R hermes:hermes /app /home/hermes
+
 USER hermes
 EXPOSE 8765
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')" || exit 1
-CMD ["python", "main.py"]
+
+CMD ["python", "-m", "uvicorn", "byoa_bridge.server:app", "--host", "0.0.0.0", "--port", "8765"]
