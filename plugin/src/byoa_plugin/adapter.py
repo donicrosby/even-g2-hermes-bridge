@@ -248,7 +248,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         event = MessageEvent(
             text=text,
             message_type=MessageType.TEXT,
-            source=self.build_source(chat_id=chat_id),
+            source=self.build_source(chat_id=chat_id, user_id=chat_id),
         )
         self._spawn(self.handle_message(event))
 
@@ -279,7 +279,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         event = MessageEvent(
             text=text,
             message_type=MessageType.VOICE,
-            source=self.build_source(chat_id=chat_id),
+            source=self.build_source(chat_id=chat_id, user_id=chat_id),
         )
         LOG.info("handle_message start chat_id=%s text=%r", chat_id, text[:80])
         try:
@@ -298,7 +298,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         event = MessageEvent(
             text="/sessions",
             message_type=MessageType.TEXT,
-            source=self.build_source(chat_id=chat_id),
+            source=self.build_source(chat_id=chat_id, user_id=chat_id),
         )
         self._spawn(self.handle_message(event))
 
@@ -323,7 +323,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         event = MessageEvent(
             text=f"/resume {target}",
             message_type=MessageType.TEXT,
-            source=self.build_source(chat_id=chat_id),
+            source=self.build_source(chat_id=chat_id, user_id=chat_id),
         )
         self._spawn(self.handle_message(event))
 
@@ -333,7 +333,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         event = MessageEvent(
             text="/new",
             message_type=MessageType.TEXT,
-            source=self.build_source(chat_id=chat_id),
+            source=self.build_source(chat_id=chat_id, user_id=chat_id),
         )
         self._spawn(self.handle_message(event))
 
