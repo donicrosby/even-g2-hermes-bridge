@@ -36,6 +36,26 @@ plugin transcribes (LiteLLM → parakeet → faster-whisper fallback) → emits
 
 ## Install
 
+> **Required: install Python dependencies into the gateway env first.**
+>
+> The Hermes Gateway loads plugins by source path into its existing Python env
+> and does NOT resolve `pyproject.toml` dependencies automatically
+> ([docs](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins#lazy-install-optional-python-dependencies)).
+> Any runtime dep listed in `pyproject.toml` `[project.dependencies]` must be
+> installed manually into the gateway's Python env before enabling the plugin:
+>
+> ```bash
+> # Find the gateway's Python env:
+> ls /opt/hermes/.venv/bin/python 2>/dev/null && GW_PY=/opt/hermes/.venv/bin/python || GW_PY=python3
+>
+> # Install all runtime deps from the plugin's pyproject.toml:
+> $GW_PY -m pip install -e /opt/data/plugins/even-g2/
+> # Or install individual deps:
+> $GW_PY -m pip install 'protobuf>=7.35.1'
+> ```
+>
+> Re-run whenever `[project.dependencies]` in `plugin/pyproject.toml` changes.
+
 ```bash
 # From GitHub — the /plugin suffix tells Hermes to install from the plugin/ subdirectory
 hermes plugins install youruser/even-g2-hermes-bridge/plugin --enable
