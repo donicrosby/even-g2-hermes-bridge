@@ -300,8 +300,8 @@ class EvenG2Adapter(BasePlatformAdapter):
             items = [{"id": session_id, "name": session_id[:16]}]
             frame = proto.sessions(items, active=session_id)
         else:
-            items = [{"id": "_pending", "name": "Tap mic to start"}]
-            frame = proto.sessions(items, active="_pending")
+            items = [{"id": "_none", "name": "No Sessions Found"}]
+            frame = proto.sessions(items, active="_none")
         await self.registry.send_frame(chat_id, frame)
         LOG.info(
             "frame direction=out frame_type=sessions byte_size=%d chat_id=%s",
