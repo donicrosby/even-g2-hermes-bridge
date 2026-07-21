@@ -181,6 +181,7 @@ def _format_union(types: tuple[str, ...]) -> str:
 
 
 def generate() -> str:
+    """Return the generated TypeScript protocol source."""
     return TEMPLATE.format(
         cursor=proto.STREAMING_CURSOR,
         inbound_types=_format_union(proto.INBOUND_TYPES),
@@ -189,6 +190,7 @@ def generate() -> str:
 
 
 def main() -> int:
+    """Run the CLI and print or write the generated TypeScript source."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--out",
@@ -199,9 +201,9 @@ def main() -> int:
     content = generate()
     if args.out:
         Path(args.out).write_text(content, encoding="utf-8")
-        print(f"wrote {args.out}", file=sys.stderr)
+        print(f"wrote {args.out}", file=sys.stderr)  # noqa: T201 - CLI tool output
     else:
-        print(content)
+        print(content)  # noqa: T201 - CLI tool output
     return 0
 
 

@@ -44,7 +44,7 @@ def bind(ctx: object) -> None:
 
 def set_adapter(adapter: EvenG2Adapter) -> None:
     """Called by the adapter when it finishes connect()."""
-    global _ADAPTER
+    global _ADAPTER  # module-level adapter ref  # noqa: PLW0603
     _ADAPTER = adapter
 
 
@@ -56,6 +56,7 @@ def _get_adapter() -> EvenG2Adapter | None:
 
 
 _SALIENT_ARG_KEYS = ("command", "query", "path", "url", "file", "code", "name", "input")
+_LABEL_TRUNCATION_THRESHOLD = 4
 
 
 def tool_label(tool_name: str, args: object) -> str:
@@ -67,7 +68,7 @@ def tool_label(tool_name: str, args: object) -> str:
     Truncates to MAX_LABEL_LEN chars; falls back to the bare tool name if
     no salient argument is found.
     """
-    MAX_LABEL_LEN = 64
+    max_label_len = 64
     if isinstance(args, dict):
         for key in _SALIENT_ARG_KEYS:
             if args.get(key):
@@ -76,13 +77,13 @@ def tool_label(tool_name: str, args: object) -> str:
                     continue
                 val = val.replace("\n", " ").strip()
                 prefix = f"{tool_name}: "
-                budget = MAX_LABEL_LEN - len(prefix)
-                if budget <= 4:
-                    return tool_name[:MAX_LABEL_LEN]
+                budget = max_label_len - len(prefix)
+                if budget <= _LABEL_TRUNCATION_THRESHOLD:
+                    return tool_name[:max_label_len]
                 if len(val) > budget:
                     val = val[: budget - 3] + "..."
                 return prefix + val
-    return tool_name[:MAX_LABEL_LEN]
+    return tool_name[:max_label_len]
 
 
 # ---- Hook implementations ------------------------------------------------

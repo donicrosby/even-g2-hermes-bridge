@@ -27,7 +27,7 @@ LOG = logging.getLogger("byoa_plugin.qr_setup")
 
 
 def build_payload(advertised_url: str, token: str) -> str:
-    """Build the QR payload URL: `wss://...?token=...`"""
+    """Build the QR payload URL: `wss://...?token=...`."""
     sep = "&" if "?" in advertised_url else "?"
     return f"{advertised_url}{sep}token={token}"
 

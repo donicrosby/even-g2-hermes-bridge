@@ -17,6 +17,7 @@ import os
 import secrets
 import shutil
 import subprocess
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from byoa_plugin.config import BridgeConfig
 
 
-class TailscaleNotFound(RuntimeError):
+class TailscaleNotFoundError(RuntimeError):
     """`tailscale` binary is not on PATH."""
 
 
@@ -46,9 +47,11 @@ def _write_env_file(key: str, value: str) -> None:
     env_file = HERMES_HOME / ".env"
     lines: list[str] = []
     if env_file.exists():
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            if not line.startswith(f"{key}=") and line.strip():
-                lines.append(line)
+        lines.extend(
+            line
+            for line in env_file.read_text(encoding="utf-8").splitlines()
+            if not line.startswith(f"{key}=") and line.strip()
+        )
     lines.append(f"{key}={value}")
     env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     LOG.info("wrote %s to %s", key, env_file)
@@ -72,7 +75,7 @@ def build_serve_command(cfg: BridgeConfig, serve_port: int | None = None) -> lis
     """Build the `tailscale serve` argv. Caller runs it via subprocess."""
     binary = shutil.which("tailscale")
     if binary is None:
-        raise TailscaleNotFound
+        raise TailscaleNotFoundError
     https_port = serve_port if serve_port is not None else cfg.tailscale_serve_port
     target = f"http://127.0.0.1:{cfg.ws_port}"
     return [binary, "serve", f"--https={https_port}", "--bg", target]
@@ -83,7 +86,13 @@ def enable_tailscale_serve(cfg: BridgeConfig) -> str | None:
     try:
         argv = build_serve_command(cfg)
         LOG.info("running: %s", " ".join(argv))
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=15.0)
+        proc = subprocess.run(  # noqa: S603  # trusted system binary
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=15.0,
+            check=False,
+        )
     except (subprocess.TimeoutExpired, OSError, RuntimeError) as e:
         LOG.warning("tailscale serve failed: %s", e)
         return None
@@ -135,10 +144,8 @@ def setup(cfg: BridgeConfig, *, force_token: bool = False) -> dict:
             if url:
                 public_url = url
                 os.environ["EVEN_G2_BRIDGE_PUBLIC_URL"] = url
-                try:
+                with suppress(OSError):
                     _write_env_file("EVEN_G2_BRIDGE_PUBLIC_URL", url)
-                except OSError:
-                    pass
             else:
                 LOG.warning("tailscale serve failed; user must set up manually")
 

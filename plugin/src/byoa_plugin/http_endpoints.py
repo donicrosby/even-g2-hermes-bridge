@@ -34,6 +34,7 @@ class HttpEndpointHandler:
     """
 
     def __init__(self, cfg: BridgeConfig, registry: ConnectionRegistry) -> None:
+        """Store the bridge config and active connection registry."""
         self.cfg = cfg
         self.registry = registry
 
@@ -42,6 +43,7 @@ class HttpEndpointHandler:
         _connection: ServerConnection,
         request: Request,
     ) -> Response | None:
+        """Route HTTP requests to the known health and QR endpoints."""
         path = request.path
         match path:
             case "/health":

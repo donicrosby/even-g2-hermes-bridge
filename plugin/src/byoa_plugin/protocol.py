@@ -31,40 +31,47 @@ class ProtocolParseError(ValueError):
     """Base for malformed client frames."""
 
 
-class MalformedJSONFrame(ProtocolParseError):
+class MalformedJSONFrameError(ProtocolParseError):
     """Client sent a frame that failed JSON parsing."""
 
     def __init__(self, original: Exception) -> None:
+        """Create a malformed JSON frame error."""
         self.original = original
         super().__init__(f"malformed JSON frame: {original}")
 
 
-class MissingTField(ProtocolParseError):
+class MissingTFieldError(ProtocolParseError):
     """Client frame parsed as JSON but lacks the required 't' discriminator."""
 
     def __init__(self) -> None:
+        """Create a missing frame discriminator error."""
         super().__init__("frame missing required 't' field")
 
 # ---- Inbound frame constructors (client → server) -------------------------
 
 
 def hello(token: str, device: str = "g2") -> str:
+    """Build a hello frame."""
     return json.dumps({"t": "hello", "token": token, "device": device})
 
 
 def text(content: str) -> str:
+    """Build a text frame."""
     return json.dumps({"t": "text", "text": content})
 
 
 def audio_start() -> str:
+    """Build an audio start frame."""
     return json.dumps({"t": "audio.start"})
 
 
 def audio_stop() -> str:
+    """Build an audio stop frame."""
     return json.dumps({"t": "audio.stop"})
 
 
 def sessions_list() -> str:
+    """Build a sessions list frame."""
     return json.dumps({"t": "sessions.list"})
 
 
@@ -74,10 +81,12 @@ def sessions_switch(target: str) -> str:
 
 
 def sessions_new() -> str:
+    """Build a sessions new frame."""
     return json.dumps({"t": "sessions.new"})
 
 
 def stop() -> str:
+    """Build a stop frame."""
     return json.dumps({"t": "stop"})
 
 
@@ -85,6 +94,7 @@ def stop() -> str:
 
 
 def hello_ok(active: str | None = None, caps: list[str] | None = None) -> str:
+    """Build a hello.ok frame."""
     payload: dict[str, Any] = {"t": "hello.ok"}
     if active is not None:
         payload["active"] = active
@@ -94,16 +104,19 @@ def hello_ok(active: str | None = None, caps: list[str] | None = None) -> str:
 
 
 def assistant_delta(text: str) -> str:
+    """Build an assistant delta frame."""
     return json.dumps({"t": "assistant.delta", "text": text})
 
 
 def assistant_full(text: str) -> str:
+    """Build a full assistant frame."""
     return json.dumps({"t": "assistant", "text": text})
 
 
 def tool_start(
     name: str, label: str | None = None, emoji: str | None = None,
 ) -> str:
+    """Build a tool start frame."""
     payload: dict[str, Any] = {"t": "tool.start", "name": name}
     if label:
         payload["label"] = label
@@ -112,15 +125,18 @@ def tool_start(
     return json.dumps(payload)
 
 
-def tool_end(name: str, ok: bool = True) -> str:
+def tool_end(name: str, *, ok: bool = True) -> str:
+    """Build a tool end frame."""
     return json.dumps({"t": "tool.end", "name": name, "ok": ok})
 
 
 def turn_done() -> str:
+    """Build a turn done frame."""
     return json.dumps({"t": "turn.done"})
 
 
 def sessions(items: list[dict[str, Any]], active: str | None = None) -> str:
+    """Build a sessions frame."""
     payload: dict[str, Any] = {"t": "sessions", "items": items}
     if active is not None:
         payload["active"] = active
@@ -128,6 +144,7 @@ def sessions(items: list[dict[str, Any]], active: str | None = None) -> str:
 
 
 def active(session_id: str, name: str | None = None) -> str:
+    """Build an active session frame."""
     payload: dict[str, Any] = {"t": "active", "id": session_id}
     if name is not None:
         payload["name"] = name
@@ -135,18 +152,24 @@ def active(session_id: str, name: str | None = None) -> str:
 
 
 def history(
-    session_id: str, items: list[dict[str, Any]], ok: bool = True,
+    session_id: str,
+    items: list[dict[str, Any]],
+    *,
+    ok: bool = True,
 ) -> str:
+    """Build a history frame."""
     return json.dumps(
         {"t": "history", "id": session_id, "items": items, "ok": ok},
     )
 
 
 def transcript(text: str) -> str:
+    """Build a transcript frame."""
     return json.dumps({"t": "transcript", "text": text})
 
 
 def error(message: str) -> str:
+    """Build an error frame."""
     return json.dumps({"t": "error", "msg": message})
 
 
@@ -164,9 +187,9 @@ def parse_client(raw: str | bytes) -> dict[str, Any]:
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise MalformedJSONFrame(e) from e
+        raise MalformedJSONFrameError(e) from e
     if not isinstance(obj, dict) or "t" not in obj:
-        raise MissingTField
+        raise MissingTFieldError
     return obj
 
 

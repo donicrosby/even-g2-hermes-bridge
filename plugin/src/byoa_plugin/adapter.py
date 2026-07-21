@@ -16,14 +16,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anyio
 
 from byoa_plugin import protocol as proto
 from byoa_plugin.connections import ConnectionRegistry
 from byoa_plugin.server import BridgeServer
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
 
 # ---- Hermes Gateway type shim ---------------------------------------------
 # When this module is loaded by the Hermes Gateway process, `gateway` is
@@ -41,44 +43,57 @@ except ImportError:  # pragma: no cover — only hit outside Hermes runtime
     LOG = logging.getLogger("byoa_plugin.adapter")
 
     class SendResult:  # type: ignore[no-redef]
-        def __init__(self, success: bool, message_id: str = "", error: str = ""):
+        """Stub return type for adapter.send/edit_message."""
+
+        def __init__(self, success: bool, *, message_id: str = "", error: str = "") -> None:  # noqa: FBT001
+            """Store send result fields."""
             self.success = success
             self.message_id = message_id
             self.error = error
 
     class MessageType:  # type: ignore[no-redef]
+        """Stub message-type enum."""
+
         TEXT = "text"
         VOICE = "voice"
 
     class MessageEvent:  # type: ignore[no-redef]
+        """Stub inbound message event."""
+
         def __init__(
             self,
             chat_id: str,
             text: str = "",
             message_type: str = "text",
-            metadata: dict | None = None,
-        ):
+            metadata: dict[str, Any] | None = None,
+        ) -> None:
+            """Store inbound message fields."""
             self.chat_id = chat_id
             self.text = text
             self.message_type = message_type
             self.metadata = metadata or {}
 
     class BasePlatformAdapter:  # type: ignore[no-redef]
+        """Stub base class matching the real gateway interface."""
+
         def __init__(self, config: object, platform: object) -> None:
+            """Store config and platform identity."""
             self.config = config
             self.platform = platform
-            self._message_handler: Callable | None = None
+            self._message_handler: Callable[..., Any] | None = None
 
         def _mark_connected(self) -> None:
-            pass
+            """Stub — no-op outside the gateway."""
 
         def _mark_disconnected(self) -> None:
-            pass
+            """Stub — no-op outside the gateway."""
 
-        def set_message_handler(self, handler: Callable) -> None:
+        def set_message_handler(self, handler: Callable[..., Any]) -> None:
+            """Store the gateway's message-handling callback."""
             self._message_handler = handler
 
         async def handle_message(self, event: MessageEvent) -> None:
+            """Forward an inbound event to the gateway's handler."""
             if self._message_handler is not None:
                 await self._message_handler(event)
 
@@ -91,13 +106,18 @@ try:
     EVEN_G2 = Platform("even-g2")
 except ImportError:
     class Platform:  # type: ignore[no-redef]
+        """Stub platform enum value."""
+
         def __init__(self, name: str) -> None:
+            """Store the platform name as the enum value."""
             self.value = name
 
         def __eq__(self, other: object) -> bool:  # type: ignore[override]
+            """Compare by value."""
             return isinstance(other, Platform) and self.value == other.value
 
-        def __hash__(self):  # type: ignore[override]
+        def __hash__(self) -> int:  # type: ignore[override]
+            """Hash by value."""
             return hash(self.value)
 
     EVEN_G2 = Platform("even-g2")
@@ -109,10 +129,11 @@ class EvenG2Adapter(BasePlatformAdapter):
     """Hermes platform adapter that hosts a WS server for the glasses-app.
 
     Inbound: glasses-app → WS server → adapter.handle_message() → gateway
-    Outbound: gateway → adapter.send_message/edit_message() → WS push → glasses-app
+    Outbound: gateway → adapter.send/edit_message() → WS push → glasses-app
     """
 
     def __init__(self, config: object) -> None:
+        """Initialize the adapter from PlatformConfig + env vars."""
         super().__init__(config, EVEN_G2)
 
         extra = getattr(config, "extra", {}) or {}
@@ -140,7 +161,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         # Primitives migrated to anyio (Event, Lock, sleep); bg-task tracking
         # still uses asyncio.create_task — full TaskGroup migration requires
         # reworking the adapter lifecycle (long-lived tg owned by connect()).
-        self._bg_tasks: set[asyncio.Task] = set()  # noqa: RUF006
+        self._bg_tasks: set[asyncio.Task] = set()
 
         # Pending transcript results from ASR (audio.stop → transcribe → handle).
         self._asr_transcribe: Callable[[bytes], str] | None = None
@@ -150,7 +171,7 @@ class EvenG2Adapter(BasePlatformAdapter):
 
     # ---- Lifecycle ---------------------------------------------------------
 
-    async def connect(self) -> bool:
+    async def connect(self, *, is_reconnect: bool = False) -> bool:  # noqa: ARG002
         """Start the WS server and mark the platform as connected."""
         self._server = BridgeServer(
             self.cfg,
@@ -174,6 +195,7 @@ class EvenG2Adapter(BasePlatformAdapter):
         return True
 
     async def disconnect(self) -> None:
+        """Stop the WS server and mark the platform as disconnected."""
         if self._server is not None:
             await self._server.stop()
             self._server = None
@@ -202,10 +224,10 @@ class EvenG2Adapter(BasePlatformAdapter):
 
     async def _handle_voice(self, chat_id: str, pcm: bytes) -> None:
         try:
-            from byoa_plugin.asr import transcribe  # noqa: PLC0415
+            from byoa_plugin.asr import transcribe
             text = transcribe(pcm, self.cfg)
-        except (OSError, RuntimeError) as e:
-            LOG.exception("ASR failed chat_id=%s: %s", chat_id, e)
+        except (OSError, RuntimeError):
+            LOG.exception("ASR failed chat_id=%s", chat_id)
             await self.registry.send_frame(chat_id, proto.error("voice transcription failed"))
             return
 
@@ -255,13 +277,13 @@ class EvenG2Adapter(BasePlatformAdapter):
 
     # ---- Outbound delivery (called by Hermes Gateway) ---------------------
 
-    async def send_message(
-        self, chat_id: str, text: str, reply_to: object = None, metadata: object = None,
+    async def send(
+        self, chat_id: str, content: str, reply_to: object = None, metadata: object = None,  # noqa: ARG002
     ) -> SendResult:
-        """First delivery of an assistant message — send the full text as a delta."""
+        """Deliver an assistant message — full text pushed as a delta."""
         state = self.registry.stream_state(chat_id)
         state.reset()
-        delta = state.delta_for(text)
+        delta = state.delta_for(content)
         if delta:
             ok = await self.registry.send_frame(chat_id, proto.assistant_delta(delta))
             if not ok:
@@ -275,9 +297,9 @@ class EvenG2Adapter(BasePlatformAdapter):
         content: str,
         *,
         finalize: bool = False,
-        metadata: object = None,
+        metadata: object = None,  # noqa: ARG002
     ) -> SendResult:
-        """Subsequent update — send only the new suffix as a delta."""
+        """Send a streaming delta update for an existing assistant message."""
         state = self.registry.stream_state(chat_id)
         delta = state.delta_for(content)
         if delta:
@@ -289,18 +311,21 @@ class EvenG2Adapter(BasePlatformAdapter):
         return SendResult(success=True, message_id=message_id)
 
     async def get_chat_info(self, chat_id: str) -> dict[str, Any]:
+        """Return minimal chat metadata for the gateway."""
         return {"name": chat_id, "type": "dm"}
 
     # ---- Session tracking --------------------------------------------------
 
     def bind_session(self, chat_id: str, session_id: str) -> None:
-        """Hook for the gateway (or hooks.py) to record which session a chat_id maps to."""
+        """Record which gateway session a chat_id maps to."""
         self._session_by_chat[chat_id] = session_id
 
     def session_for_chat(self, chat_id: str) -> str | None:
+        """Return the session_id bound to a chat_id, if any."""
         return self._session_by_chat.get(chat_id)
 
     def chat_for_session(self, session_id: str) -> str | None:
+        """Return the chat_id bound to a session_id, if any."""
         for cid, sid in self._session_by_chat.items():
             if sid == session_id:
                 return cid

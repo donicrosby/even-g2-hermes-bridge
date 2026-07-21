@@ -28,9 +28,9 @@ _LOAD_LOCK = threading.Lock()
 _LOADED_MODEL = None
 
 
-def _load_model():
+def _load_model() -> object:
     """Lazy-load the faster-whisper model. Thread-safe."""
-    global _LOADED_MODEL
+    global _LOADED_MODEL  # noqa: PLW0603  # lazy singleton
     if _LOADED_MODEL is not None:
         return _LOADED_MODEL
     with _LOAD_LOCK:
@@ -64,6 +64,7 @@ class WhisperCPUBackend:
     """Transcribes via faster-whisper on CPU."""
 
     def transcribe(self, pcm16_bytes: bytes) -> str:
+        """Transcribe PCM16 bytes through faster-whisper."""
         model = _load_model()
         audio = pcm16_to_float32(pcm16_bytes)
         try:

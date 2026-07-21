@@ -16,9 +16,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import anyio
+from websockets.exceptions import ConnectionClosed
 
 from byoa_plugin import protocol as proto
-from websockets.exceptions import ConnectionClosed
 
 if TYPE_CHECKING:
     from websockets.asyncio.server import ServerConnection
@@ -57,6 +57,7 @@ class StreamState:
         return delta
 
     def reset(self) -> None:
+        """Reset the streaming cursor so the next delta starts fresh."""
         self.sent_len = 0
 
 
@@ -69,6 +70,7 @@ class ConnectionRegistry:
     """
 
     def __init__(self) -> None:
+        """Initialize the in-memory connection map and lock."""
         self._conns: dict[str, tuple[ServerConnection, StreamState]] = {}
         self._lock = anyio.Lock()
 
@@ -119,6 +121,7 @@ class ConnectionRegistry:
             LOG.info("unregistered chat_id=%s", chat_id)
 
     def get(self, chat_id: str) -> ServerConnection | None:
+        """Return the active socket for `chat_id`, if one exists."""
         entry = self._conns.get(chat_id)
         return entry[0] if entry is not None else None
 
@@ -148,7 +151,6 @@ class ConnectionRegistry:
         ws, _ = entry
         try:
             await ws.send(frame)
-            return True
         except (ConnectionClosed, OSError) as e:
             LOG.warning(
                 "send_frame failed for chat_id=%s: %s — unregistering",
@@ -162,6 +164,9 @@ class ConnectionRegistry:
                 if cur is not None and cur[0] is ws:
                     del self._conns[chat_id]
             return False
+        else:
+            return True
 
     def active_chat_ids(self) -> list[str]:
+        """Return the currently registered chat IDs."""
         return list(self._conns.keys())

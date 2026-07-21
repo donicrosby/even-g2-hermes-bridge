@@ -27,13 +27,13 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from byoa_plugin import protocol as proto
-from byoa_plugin.connections import ConnectionRegistry
 from byoa_plugin.http_endpoints import HttpEndpointHandler
 
 if TYPE_CHECKING:
     from websockets.asyncio.server import ServerConnection
 
     from byoa_plugin.config import BridgeConfig
+    from byoa_plugin.connections import ConnectionRegistry
 
 LOG = logging.getLogger("byoa_plugin.server")
 
@@ -52,7 +52,7 @@ BinaryHandler = Callable[[str, bytes], None]
 class BridgeServer:
     """WebSocket server that bridges glasses-app ↔ plugin."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         cfg: BridgeConfig,
         registry: ConnectionRegistry,
@@ -64,6 +64,7 @@ class BridgeServer:
         on_sessions_new: Callable[[str], None] | None = None,
         on_stop: Callable[[str], None] | None = None,
     ) -> None:
+        """Initialize the bridge server and its event callbacks."""
         self.cfg = cfg
         self.registry = registry
         self._http_handler = HttpEndpointHandler(cfg, registry)
@@ -76,6 +77,7 @@ class BridgeServer:
         self._server = None
 
     async def start(self) -> None:
+        """Start the WebSocket server and HTTP endpoint handler."""
         host = self.cfg.ws_host
         port = self.cfg.ws_port
         LOG.info("WS server starting on %s:%s", host, port)
@@ -99,6 +101,7 @@ class BridgeServer:
         LOG.info("WS server listening on %s:%s", host, port)
 
     async def stop(self) -> None:
+        """Stop the server and wait for active connections to close."""
         # Close the server — connections drop, handlers exit, and ping
         # tasks are cancelled automatically by their TaskGroup scopes.
         # wait_closed() bounded by 5s so a stuck handler can't hang shutdown.
@@ -112,7 +115,8 @@ class BridgeServer:
             self._server = None
         LOG.info("WS server stopped")
 
-    async def _handle(self, ws: ServerConnection) -> None:
+    async def _handle(self, ws: ServerConnection) -> None:  # noqa: C901, PLR0912, PLR0915
+        """Handle one WebSocket connection from hello handshake to teardown."""
         chat_id: str | None = None
         ping_task: asyncio.Task[None] | None = None
 
@@ -218,8 +222,8 @@ class BridgeServer:
                         )
         except ConnectionClosed:
             pass
-        except Exception as e:
-            LOG.exception("handler crashed for chat_id=%s: %s", chat_id, e)
+        except Exception:
+            LOG.exception("handler crashed for chat_id=%s", chat_id)
         finally:
             if ping_task is not None:
                 ping_task.cancel()
@@ -230,6 +234,7 @@ class BridgeServer:
             LOG.debug("handler exited chat_id=%s", chat_id)
 
     async def _ping_loop(self, ws: ServerConnection, chat_id: str) -> None:
+        """Send periodic text-level keepalives while the socket is open."""
         try:
             while True:
                 await anyio.sleep(PING_INTERVAL_SEC)

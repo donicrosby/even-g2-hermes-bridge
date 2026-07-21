@@ -21,16 +21,16 @@ LOG = logging.getLogger("byoa_plugin.net")
 
 def tailscale_status() -> dict | None:
     """Return parsed `tailscale status --json` or None if Tailscale isn't available."""
-
     binary = shutil.which("tailscale")
     if binary is None:
         return None
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # trusted system binary  # noqa: S603
             [binary, "status", "--json"],
             capture_output=True,
             text=True,
             timeout=5.0,
+            check=False,
         )
     except (subprocess.TimeoutExpired, OSError) as e:
         LOG.debug("tailscale status failed: %s", e)
@@ -46,6 +46,7 @@ def tailscale_status() -> dict | None:
 
 
 def tailscale_available() -> bool:
+    """Return True when the Tailscale CLI is installed and responding."""
     return tailscale_status() is not None
 
 
@@ -79,7 +80,10 @@ def resolve_advertised_url(cfg: BridgeConfig) -> str:
     # 2. Tailscale MagicDNS.
     status = tailscale_status()
     if status is not None:
-        magic_dns = status.get("MagicDNSSuffix") or status.get("CurrentTailnet", {}).get("MagicDNSSuffix")
+        magic_dns = (
+            status.get("MagicDNSSuffix")
+            or status.get("CurrentTailnet", {}).get("MagicDNSSuffix")
+        )
         self_info = status.get("Self") or {}
         host_name = self_info.get("HostName") or self_info.get("DNSName")
         if host_name and "." not in host_name and magic_dns:

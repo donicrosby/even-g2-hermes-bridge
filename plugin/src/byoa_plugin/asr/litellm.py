@@ -17,7 +17,7 @@ from byoa_plugin.asr import (
     ENV_LITELLM_API_KEY,
     ENV_LITELLM_BASE_URL,
     ENV_LITELLM_MODEL,
-    ASRConfigMissing,
+    ASRConfigMissingError,
     ASRHTTPError,
     ASRResponseError,
     ASRTransportError,
@@ -27,13 +27,16 @@ LOG = logging.getLogger("byoa_plugin.asr.litellm")
 
 # Whisper expects 16kHz mono WAV. The glasses send PCM16 LE 16kHz mono,
 # so we just wrap it as WAV.
-SAMPLE_RATE = 16000
-SAMPLE_WIDTH = 2  # bytes per sample (16-bit)
+SAMPLE_RATE_HZ = 16_000
+SAMPLE_WIDTH_BYTES = 2  # bytes per sample (16-bit)
 CHANNELS = 1
 
 # Network timeout for the LiteLLM call. Generous — Whisper on a cold GPU
 # can take a few seconds.
 TIMEOUT_SEC = 30.0
+HTTP_STATUS_ERROR_THRESHOLD = 400
+HTTP_ERROR_BODY_LIMIT = 400
+DEBUG_TEXT_PREVIEW_LIMIT = 80
 
 
 def pcm16_to_wav_bytes(pcm: bytes) -> bytes:
@@ -41,8 +44,8 @@ def pcm16_to_wav_bytes(pcm: bytes) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(CHANNELS)
-        w.setsampwidth(SAMPLE_WIDTH)
-        w.setframerate(SAMPLE_RATE)
+        w.setsampwidth(SAMPLE_WIDTH_BYTES)
+        w.setframerate(SAMPLE_RATE_HZ)
         w.writeframes(pcm)
     return buf.getvalue()
 
@@ -51,17 +54,19 @@ class LiteLLMWhisperBackend:
     """Calls LiteLLM's /v1/audio/transcriptions endpoint."""
 
     def __init__(self, *, model: str, base_url: str, api_key: str) -> None:
+        """Initialize the backend with LiteLLM connection settings."""
         if not model:
-            raise ASRConfigMissing(ENV_LITELLM_MODEL)
+            raise ASRConfigMissingError(ENV_LITELLM_MODEL)
         if not base_url:
-            raise ASRConfigMissing(ENV_LITELLM_BASE_URL)
+            raise ASRConfigMissingError(ENV_LITELLM_BASE_URL)
         if not api_key:
-            raise ASRConfigMissing(ENV_LITELLM_API_KEY)
+            raise ASRConfigMissingError(ENV_LITELLM_API_KEY)
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
     def transcribe(self, pcm16_bytes: bytes) -> str:
+        """Transcribe PCM16 bytes through LiteLLM."""
         wav_bytes = pcm16_to_wav_bytes(pcm16_bytes)
         url = f"{self.base_url}/v1/audio/transcriptions"
         headers = {"Authorization": f"Bearer {self.api_key}"}
@@ -74,8 +79,8 @@ class LiteLLMWhisperBackend:
         except httpx.HTTPError as e:
             raise ASRTransportError(str(e)) from e
 
-        if resp.status_code >= 400:
-            body = resp.text[:200]
+        if resp.status_code >= HTTP_STATUS_ERROR_THRESHOLD:
+            body = resp.text[:HTTP_ERROR_BODY_LIMIT]
             raise ASRHTTPError(resp.status_code, body)
 
         try:
@@ -92,6 +97,6 @@ class LiteLLMWhisperBackend:
         LOG.debug(
             "litellm whisper OK: pcm_in=%d bytes text=%r",
             len(pcm16_bytes),
-            text[:80],
+            text[:DEBUG_TEXT_PREVIEW_LIMIT],
         )
         return text.strip()

@@ -45,6 +45,7 @@ class BridgeConfig:
 
     @classmethod
     def from_env(cls) -> BridgeConfig:
+        """Build a BridgeConfig from Hermes and plugin environment variables."""
         token = os.getenv("EVEN_G2_BRIDGE_TOKEN", "").strip()
         host = os.getenv("EVEN_G2_BRIDGE_HOST", "127.0.0.1").strip()
         port = int(os.getenv("EVEN_G2_BRIDGE_PORT", "8767").strip() or "8767")

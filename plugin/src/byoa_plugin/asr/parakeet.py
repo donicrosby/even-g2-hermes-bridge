@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import subprocess
+from pathlib import Path
 
 from byoa_plugin.asr import (
     ENV_SIDECAR_BIN,
-    ASRConfigMissing,
-    ASRResourceMissing,
+    ASRConfigMissingError,
+    ASRResourceMissingError,
     ASRSidecarError,
 )
 
@@ -23,16 +23,18 @@ LOG = logging.getLogger("byoa_plugin.asr.parakeet")
 
 _SIDECAR_CLOSED = "closed unexpectedly"
 _SIDECAR_NON_STRING_TEXT = "returned non-string text"
+_FRAME_LENGTH_BYTES = 4
 
 
 class ParakeetBackend:
     """Spawns the parakeet Swift sidecar; communicates via stdin/stdout JSON."""
 
     def __init__(self, *, sidecar_bin: str) -> None:
+        """Initialize the backend with the sidecar binary path."""
         if not sidecar_bin:
-            raise ASRConfigMissing(ENV_SIDECAR_BIN)
-        if not os.path.exists(sidecar_bin):
-            raise ASRResourceMissing(sidecar_bin)
+            raise ASRConfigMissingError(ENV_SIDECAR_BIN)
+        if not Path(sidecar_bin).exists():
+            raise ASRResourceMissingError(sidecar_bin)
         self.sidecar_bin = sidecar_bin
         self._proc: subprocess.Popen | None = None
 
@@ -40,7 +42,7 @@ class ParakeetBackend:
         if self._proc is not None and self._proc.poll() is None:
             return self._proc
         try:
-            self._proc = subprocess.Popen(
+            self._proc = subprocess.Popen(  # noqa: S603  # trusted binary
                 [self.sidecar_bin],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -52,19 +54,20 @@ class ParakeetBackend:
         return self._proc
 
     def transcribe(self, pcm16_bytes: bytes) -> str:
+        """Transcribe PCM16 bytes through the parakeet sidecar."""
         proc = self._ensure_started()
         # Frame: [4-byte big-endian length][pcm bytes]
         # Expect response: [4-byte big-endian length][json bytes]
         try:
-            header = len(pcm16_bytes).to_bytes(4, "big")
-            assert proc.stdin is not None
+            header = len(pcm16_bytes).to_bytes(_FRAME_LENGTH_BYTES, "big")
+            assert proc.stdin is not None  # noqa: S101  # defensive check
             proc.stdin.write(header)
             proc.stdin.write(pcm16_bytes)
             proc.stdin.flush()
 
-            assert proc.stdout is not None
-            resp_header = proc.stdout.read(4)
-            if len(resp_header) != 4:
+            assert proc.stdout is not None  # noqa: S101  # defensive check
+            resp_header = proc.stdout.read(_FRAME_LENGTH_BYTES)
+            if len(resp_header) != _FRAME_LENGTH_BYTES:
                 raise ASRSidecarError(_SIDECAR_CLOSED)
             resp_len = int.from_bytes(resp_header, "big")
             resp_body = proc.stdout.read(resp_len)
