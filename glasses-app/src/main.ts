@@ -97,7 +97,6 @@ let knownSessions: SessionItem[] = [];
 
 let unsubscribeEvents: (() => void) | null = null;
 let cleanupDone = false;
-let pageCreated = false;
 
 // ===== State persistence (SDK 0.0.12) ======================================
 // SDK 0.0.12 lacks setBackgroundState/onBackgroundRestore, so we persist via
@@ -615,26 +614,23 @@ async function buildPage(): Promise<void> {
     ],
   };
 
-  if (!pageCreated) {
-    const result = await runBridge('createStartUpPageContainer', () =>
-      bridge!.createStartUpPageContainer(
-        new CreateStartUpPageContainer(containers),
-      ),
-    );
-    if (result !== StartUpPageCreateResult.success) {
-      log.error('createStartUpPageContainer failed', { result });
-      return;
-    }
-    pageCreated = true;
+  const result = await runBridge('createStartUpPageContainer', () =>
+    bridge!.createStartUpPageContainer(
+      new CreateStartUpPageContainer(containers),
+    ),
+  );
+  if (result === StartUpPageCreateResult.success) {
     log.info('createStartUpPageContainer success');
-  } else {
-    await runBridge('rebuildPageContainer', () =>
-      bridge!.rebuildPageContainer(
-        new RebuildPageContainer(containers),
-      ),
-    );
-    log.info('rebuildPageContainer success');
+    return;
   }
+
+  log.info('createStartUpPageContainer non-success, falling back to rebuild', { result: Number(result) });
+  await runBridge('rebuildPageContainer', () =>
+    bridge!.rebuildPageContainer(
+      new RebuildPageContainer(containers),
+    ),
+  );
+  log.info('rebuildPageContainer done');
 }
 
 function registerEventHandler(): void {
