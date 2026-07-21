@@ -269,14 +269,31 @@ class EvenG2Adapter(BasePlatformAdapter):
         await self.handle_message(event)
 
     def _on_sessions_list(self, chat_id: str) -> None:
-        """Forward /sessions command to the gateway."""
+        """Respond with local session list AND forward /sessions to gateway."""
         self._last_chat_id = chat_id
+        # Emit sessions frame from local state so the glasses have SOMETHING
+        # to render even before the gateway replies.
+        self._spawn(self._emit_sessions_frame(chat_id))
+        # Forward the slash command for conversation-context sync.
         event = MessageEvent(
             text="/sessions",
             message_type=MessageType.TEXT,
             source=self.build_source(chat_id=chat_id),
         )
         self._spawn(self.handle_message(event))
+
+    async def _emit_sessions_frame(self, chat_id: str) -> None:
+        """Send a sessions frame derived from _session_by_chat."""
+        session_id = self._session_by_chat.get(chat_id)
+        if session_id:
+            items = [{"id": session_id, "name": session_id[:16]}]
+            await self.registry.send_frame(
+                chat_id, proto.sessions(items, active=session_id),
+            )
+        else:
+            await self.registry.send_frame(
+                chat_id, proto.sessions([], active=None),
+            )
 
     def _on_sessions_switch(self, chat_id: str, target: str) -> None:
         """Forward /resume command to the gateway."""
