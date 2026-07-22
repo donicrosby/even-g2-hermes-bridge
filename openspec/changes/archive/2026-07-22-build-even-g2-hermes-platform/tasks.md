@@ -123,14 +123,16 @@
 
 - [ ] 12.1 Install plugin on `hermes.local`: `hermes plugins install ./plugin/ && hermes plugins enable even_g2 && hermes gateway restart`
 - [ ] 12.2 Run `hermes even-g2 setup` to configure Tailscale Serve and generate the bridge token
-- [ ] 12.3 Package and install the rewritten `glasses-app/` on the phone via Even's app loading flow
-- [ ] 12.4 Open the glasses-app, enter the bridge URL + token (or use auto-discovery if implemented)
-- [ ] 12.5 Long-press touchpad, say "hello", observe streaming reply on HUD
+- [x] 12.3 Package and install the rewritten `glasses-app/` on the phone via Even's app loading flow
+- [x] 12.4 Open the glasses-app, enter the bridge URL + token (or use auto-discovery if implemented)
+- [x] 12.5 Long-press touchpad, say "hello", observe streaming reply on HUD
 - [ ] 12.6 Test: long prompt that takes > 30s to respond — verify HUD survives (no timeout, unlike BYOA)
 - [ ] 12.7 Test: double-tap to interrupt — verify agent stops and HUD shows "Stopped"
 - [ ] 12.8 Test: scroll to switch sessions — verify session list appears and switching works
 - [ ] 12.9 Test: tool call (if the agent uses tools) — verify `tool.start` / `tool.end` frames render on status line
 - [ ] 12.10 Capture observations in `openspec/changes/build-even-g2-hermes-platform/observations.md`
+
+**Status (12.3-12.5):** Implicitly verified during the 2026-07-22 session via the `fix-page-container-lifecycle` work — user confirmed "That fixed it!" after installing the rebuilt `hermes-bridge.ehpk`, entering bridge credentials, and using the streaming flow. The remaining 12.6-12.10 tasks are edge-case UX verification that needs dedicated hardware test sessions.
 
 ## 13. Cleanup and handoff
 
