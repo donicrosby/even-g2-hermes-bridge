@@ -369,11 +369,11 @@ function handleTranscript(frame: TranscriptFrame): void {
 }
 
 function renderPendingChoices(): void {
-  const options = ['Confirm', 'Retry'];
-  const lines = options.map((opt, i) =>
-    i === pendingChoiceIndex ? `>${opt}` : ` ${opt}`,
-  );
-  void upgradeText(STATUS_CID, STATUS_CNAME, lines.join('\n'));
+  if (pendingChoiceIndex === 0) {
+    void upgradeText(STATUS_CID, STATUS_CNAME, '>Confirm  Retry');
+  } else {
+    void upgradeText(STATUS_CID, STATUS_CNAME, ' Confirm >Retry');
+  }
 }
 
 function confirmTranscript(): void {
