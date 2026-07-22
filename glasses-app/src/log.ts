@@ -4,7 +4,7 @@
 
 type LogFields = Record<string, unknown>;
 
-const MAX_ENTRIES = 200;
+const MAX_ENTRIES = 500;
 const STORAGE_KEY = 'hermes_log_buffer';
 const logBuffer: string[] = [];
 
@@ -39,6 +39,48 @@ function emit(level: string, event: string, fields: LogFields): void {
 
 export function getLogBuffer(): string[] {
   return [...logBuffer];
+}
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogEntry = {
+  level: LogLevel;
+  event: string;
+  timestamp: string;
+  fields: LogFields;
+};
+
+export function getLogEntries(): LogEntry[] {
+  const entries: LogEntry[] = [];
+  for (const line of logBuffer) {
+    try {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      const { level, event, timestamp, ...fields } = parsed;
+      entries.push({
+        level: (typeof level === 'string' ? level : 'info') as LogLevel,
+        event: typeof event === 'string' ? event : '(unknown)',
+        timestamp: typeof timestamp === 'string' ? timestamp : '',
+        fields,
+      });
+    } catch {
+      entries.push({
+        level: 'info',
+        event: '(unparseable)',
+        timestamp: '',
+        fields: { raw: line },
+      });
+    }
+  }
+  return entries;
+}
+
+export type LevelCounts = Record<LogLevel, number>;
+
+export function getLevelCounts(): LevelCounts {
+  const counts: LevelCounts = { debug: 0, info: 0, warn: 0, error: 0 };
+  for (const entry of getLogEntries()) {
+    counts[entry.level] += 1;
+  }
+  return counts;
 }
 
 export function clearLogBuffer(): void {

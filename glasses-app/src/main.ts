@@ -32,7 +32,14 @@ import { truncateSessionName } from './lib/session';
 import { nextBackoffDelay } from './lib/reconnect';
 import { sanitizeContent, decidePageRender } from './lib/page-lifecycle';
 import { createBridgeQueue } from './lib/bridge';
-import { log, getLogBuffer, clearLogBuffer } from './log';
+import {
+  log,
+  getLogBuffer,
+  getLogEntries,
+  getLevelCounts,
+  clearLogBuffer,
+  type LogLevel,
+} from './log';
 import {
   serializeState,
   parseState,
@@ -481,13 +488,24 @@ function showConfigScreen(): void {
         <button id="hermes-logs-btn" style="${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};width:100%">
           Show Logs
         </button>
-        <pre id="hermes-logs-panel" style="display:none;margin-top:8px;padding:8px;background:${EVEN_COLORS.inputBg};border-radius:8px;font-size:11px;line-height:1.4;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;font-family:monospace"></pre>
-        <button id="hermes-logs-clear" style="display:none;${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};margin-top:4px;font-size:12px">
-          Clear
-        </button>
-        <button id="hermes-logs-copy" style="display:none;${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};margin-top:4px;font-size:12px">
-          Copy
-        </button>
+        <div id="hermes-logs-debug" style="display:none;margin-top:8px">
+          <div id="hermes-logs-header" style="font-size:11px;color:${EVEN_COLORS.textDim};margin-bottom:4px;font-family:monospace"></div>
+          <div id="hermes-logs-filters" style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">
+            <button data-level="all"     style="${btnBase};padding:4px 8px;font-size:11px;background:${EVEN_COLORS.accent};color:${EVEN_COLORS.textOnAccent}">All</button>
+            <button data-level="error"   style="${btnBase};padding:4px 8px;font-size:11px;background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text}">Errors</button>
+            <button data-level="warn"    style="${btnBase};padding:4px 8px;font-size:11px;background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text}">Warnings</button>
+            <button data-level="info"    style="${btnBase};padding:4px 8px;font-size:11px;background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text}">Info</button>
+          </div>
+          <pre id="hermes-logs-panel" style="padding:8px;background:${EVEN_COLORS.inputBg};border-radius:8px;font-size:11px;line-height:1.4;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;font-family:monospace"></pre>
+          <div style="display:flex;gap:4px;margin-top:4px">
+            <button id="hermes-logs-clear" style="${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};font-size:12px;flex:1">
+              Clear
+            </button>
+            <button id="hermes-logs-copy" style="${btnBase};background:${EVEN_COLORS.surface};color:${EVEN_COLORS.text};font-size:12px;flex:1">
+              Copy
+            </button>
+          </div>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(form);
@@ -539,40 +557,100 @@ function showConfigScreen(): void {
   });
 
   const logsBtn = document.getElementById('hermes-logs-btn');
-  const logsPanel = document.getElementById('hermes-logs-panel');
+  const logsDebug = document.getElementById('hermes-logs-debug');
+  const logsPanel = document.getElementById('hermes-logs-panel') as HTMLPreElement | null;
+  const logsHeader = document.getElementById('hermes-logs-header');
+  const logsFilters = document.getElementById('hermes-logs-filters');
   const logsClear = document.getElementById('hermes-logs-clear');
   const logsCopy = document.getElementById('hermes-logs-copy');
   let logsInterval: ReturnType<typeof setInterval> | null = null;
+  let levelFilter: LogLevel | 'all' = 'all';
+
+  const LEVEL_COLOR: Record<LogLevel, string> = {
+    debug: '#888',
+    info: EVEN_COLORS.textDim,
+    warn: '#c80',
+    error: '#c33',
+  };
+
+  function levelMatches(level: LogLevel): boolean {
+    if (levelFilter === 'all') return true;
+    if (levelFilter === 'warn') return level === 'warn' || level === 'error';
+    if (levelFilter === 'error') return level === 'error';
+    return level === levelFilter;
+  }
 
   function refreshLogs(): void {
-    if (!logsPanel) return;
-    const entries = getLogBuffer();
-    const wasNearBottom = logsPanel.scrollHeight - logsPanel.scrollTop - logsPanel.clientHeight < 80;
-    logsPanel.textContent = entries.length > 0
-      ? entries.join('\n')
-      : '(no logs yet)';
+    if (!logsPanel || !logsHeader) return;
+    const entries = getLogEntries();
+    const counts = getLevelCounts();
+    const visible = entries.filter((e) => levelMatches(e.level));
+
+    logsHeader.textContent =
+      `${visible.length}/${entries.length} entries  ·  ` +
+      `${counts.error} error${counts.error === 1 ? '' : 's'}  ·  ` +
+      `${counts.warn} warning${counts.warn === 1 ? '' : 's'}`;
+
+    const wasNearBottom =
+      logsPanel.scrollHeight - logsPanel.scrollTop - logsPanel.clientHeight < 80;
+    logsPanel.replaceChildren();
+    if (visible.length === 0) {
+      const ph = document.createElement('div');
+      ph.textContent = '(no matching entries)';
+      ph.style.color = EVEN_COLORS.textDim;
+      logsPanel.appendChild(ph);
+    } else {
+      for (const entry of visible) {
+        const line = document.createElement('div');
+        const ts = entry.timestamp.slice(11, 19);
+        const head = document.createElement('span');
+        head.textContent = `${ts} [${entry.level}] ${entry.event}`;
+        head.style.color = LEVEL_COLOR[entry.level];
+        line.appendChild(head);
+        const fieldKeys = Object.keys(entry.fields);
+        if (fieldKeys.length > 0) {
+          const tail = document.createElement('span');
+          tail.textContent = ' ' + fieldKeys
+            .map((k) => `${k}=${String(entry.fields[k])}`)
+            .join(' ');
+          tail.style.color = EVEN_COLORS.textDim;
+          line.appendChild(tail);
+        }
+        logsPanel.appendChild(line);
+      }
+    }
     if (wasNearBottom) {
       logsPanel.scrollTop = logsPanel.scrollHeight;
     }
   }
 
   logsBtn?.addEventListener('click', () => {
-    if (!logsPanel || !logsClear || !logsCopy || !logsBtn) return;
-    const isVisible = logsPanel.style.display !== 'none';
+    if (!logsDebug || !logsClear || !logsCopy || !logsBtn) return;
+    const isVisible = logsDebug.style.display !== 'none';
     if (isVisible) {
-      logsPanel.style.display = 'none';
-      logsClear.style.display = 'none';
-      logsCopy.style.display = 'none';
+      logsDebug.style.display = 'none';
       logsBtn.textContent = 'Show Logs';
       if (logsInterval) { clearInterval(logsInterval); logsInterval = null; }
     } else {
-      logsPanel.style.display = 'block';
-      logsClear.style.display = 'inline-block';
-      logsCopy.style.display = 'inline-block';
+      logsDebug.style.display = 'block';
       logsBtn.textContent = 'Hide Logs';
       refreshLogs();
       logsInterval = setInterval(refreshLogs, 1000);
     }
+  });
+
+  logsFilters?.addEventListener('click', (ev) => {
+    const target = ev.target as HTMLElement;
+    const level = target.dataset.level;
+    if (!level) return;
+    levelFilter = level as LogLevel | 'all';
+    for (const btn of Array.from(logsFilters.children)) {
+      const b = btn as HTMLElement;
+      const isActive = b.dataset.level === level;
+      b.style.background = isActive ? EVEN_COLORS.accent : EVEN_COLORS.surface;
+      b.style.color = isActive ? EVEN_COLORS.textOnAccent : EVEN_COLORS.text;
+    }
+    refreshLogs();
   });
 
   logsClear?.addEventListener('click', () => {
