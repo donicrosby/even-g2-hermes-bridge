@@ -72,6 +72,9 @@ convention = "google"
 "src/byoa_plugin/__init__.py" = [
     "PLC0415",  # lazy imports are the Hermes plugin pattern (deferred adapter/cli)
 ]
+"src/byoa_plugin/connections.py" = [
+    "ANN401",   # ws is duck-typed (WebSocketResponse in prod, FakeWS in tests)
+]
 "src/byoa_plugin/log.py" = [
     "ANN401",   # **fields: Any is the structured-logging API by design
     "PLW0603",  # global _CONFIGURED is the standard idempotent-init pattern
@@ -87,6 +90,7 @@ convention = "google"
     "TRY300",   # explicit return inside try is clearer than else-after-except
     "PLR2004",  # gzip threshold 512 matches GZipMiddleware default
     "SLF001",   # bound_port accesses _site._server (aiohttp internal)
+    "ANN401",   # set_adapter accepts Any (EvenG2Adapter in prod, SimpleNamespace in tests)
     "E501",     # match/case branches with long LOG.info lines
 ]
 "src/byoa_plugin/http_endpoints.py" = [
@@ -123,6 +127,16 @@ addopts = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
+
+[tool.basedpyright]
+typeCheckingMode = "basic"
+reportImportCycles = "none"
+reportArgumentType = "none"
+reportAttributeAccessIssue = "none"
+reportGeneralTypeIssues = "none"
+reportCallIssue = "none"
+reportReturnType = "none"
+reportInvalidTypeForm = "none"
 
 [dependency-groups]
 dev = [

@@ -13,14 +13,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any
 
 import anyio
 
 from byoa_plugin import wire as proto
-
-if TYPE_CHECKING:
-    from aiohttp.web import WebSocketResponse
 
 LOG = logging.getLogger("byoa_plugin.connections")
 
@@ -70,10 +67,10 @@ class ConnectionRegistry:
 
     def __init__(self) -> None:
         """Initialize the in-memory connection map and lock."""
-        self._conns: dict[str, tuple[WebSocketResponse, StreamState]] = {}
+        self._conns: dict[str, tuple[Any, StreamState]] = {}
         self._lock = anyio.Lock()
 
-    async def register(self, chat_id: str, ws: WebSocketResponse) -> StreamState:
+    async def register(self, chat_id: str, ws: Any) -> StreamState:
         """Register a new connection. Returns the StreamState for this chat.
 
         If an existing connection exists for chat_id and its socket differs,
@@ -97,7 +94,7 @@ class ConnectionRegistry:
                 LOG.info("registered chat_id=%s", chat_id)
             return state
 
-    async def unregister(self, chat_id: str, ws: WebSocketResponse) -> None:
+    async def unregister(self, chat_id: str, ws: Any) -> None:
         """Unregister a connection only if `ws` matches the registered one.
 
         Prevents a reconnect race where:
@@ -119,7 +116,7 @@ class ConnectionRegistry:
             del self._conns[chat_id]
             LOG.info("unregistered chat_id=%s", chat_id)
 
-    def get(self, chat_id: str) -> WebSocketResponse | None:
+    def get(self, chat_id: str) -> Any | None:
         """Return the active socket for `chat_id`, if one exists."""
         entry = self._conns.get(chat_id)
         return entry[0] if entry is not None else None
@@ -138,7 +135,7 @@ class ConnectionRegistry:
         # doesn't crash the caller. The computed delta is discarded.
         return StreamState()
 
-    async def send_frame(self, chat_id: str, frame: str) -> bool:
+    async def send_frame(self, chat_id: str, frame: bytes) -> bool:
         """Send a text frame to the chat_id's socket. Returns True on success.
 
         On send failure, unregisters the chat_id (the socket is broken).

@@ -73,7 +73,7 @@ class BridgeServer:
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
 
-    def set_adapter(self, adapter: EvenG2Adapter) -> None:
+    def set_adapter(self, adapter: Any) -> None:
         """Wire the adapter so the BYOA handler can dispatch turns."""
         self._adapter = adapter
 
