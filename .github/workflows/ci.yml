@@ -16,13 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: bufbuild/buf-setup-action@v1
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: glasses-app/package-lock.json
-      - name: Install glasses-app deps (provides ts-proto)
+      - name: Install glasses-app deps (provides buf + ts-proto)
         run: npm ci
         working-directory: glasses-app
       - uses: astral-sh/setup-uv@v3

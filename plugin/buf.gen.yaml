@@ -2,8 +2,9 @@ version: v2
 inputs:
   - directory: proto
 plugins:
-  # Python: built-in protoc plugin generates hermes_bridge_pb2.py (runtime).
-  - protoc_builtin: python
+  # Python: remote plugin generates hermes_bridge_pb2.py (runtime).
+  # Uses Buf's managed protoc — no system protoc dependency.
+  - remote: buf.build/protocolbuffers/python
     out: src/byoa_plugin/proto_gen
 
   # Python: typed stubs via mypy-protobuf (installed in plugin/.venv).
