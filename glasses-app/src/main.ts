@@ -31,6 +31,7 @@ import {
 import { truncateSessionName } from './lib/session';
 import { nextBackoffDelay } from './lib/reconnect';
 import { sanitizeContent, decidePageRender } from './lib/page-lifecycle';
+import { createBridgeQueue } from './lib/bridge';
 import { log, getLogBuffer, clearLogBuffer } from './log';
 import {
   serializeState,
@@ -54,6 +55,9 @@ function isConfigured(): boolean {
   const { url, token } = getConfig();
   return url.length > 0 && token.length > 0;
 }
+
+const queue = createBridgeQueue();
+const runBridge = queue.runBridge;
 
 // ===== Container layout (576×288 canvas) ===================================
 
@@ -99,14 +103,8 @@ let cleanupDone = false;
 
 async function restoreState(): Promise<void> {
   if (!bridge) return;
-  let raw: string;
-  try {
-    raw = await bridge.getLocalStorage(STATE_KEY);
-  } catch (e) {
-    log.warn('getLocalStorage failed', { error: String(e) });
-    return;
-  }
-  if (!raw) return;;
+  const raw = await runBridge('getLocalStorage', () => bridge!.getLocalStorage(STATE_KEY));
+  if (!raw) return;
   try {
     const merged = mergeState(currentMutableState(), parseState(raw));
     accumulatedAssistantText = merged.accumulatedAssistantText;
@@ -140,19 +138,17 @@ function scheduleSave(): void {
 
 async function saveState(): Promise<void> {
   if (!bridge) return;
-  try {
-    await bridge.setLocalStorage(STATE_KEY, serializeState(currentMutableState()));
-  } catch (e) {
-    log.warn('setLocalStorage failed', { error: String(e) });
-  }
+  await runBridge('setLocalStorage', () =>
+    bridge!.setLocalStorage(STATE_KEY, serializeState(currentMutableState())),
+  );
 }
 
 // ===== Rendering ===========================================================
 
 async function upgradeText(cid: number, cname: string, content: string): Promise<void> {
   if (!bridge) return;
-  try {
-    await bridge.textContainerUpgrade(
+  await runBridge('textContainerUpgrade', () =>
+    bridge!.textContainerUpgrade(
       new TextContainerUpgrade({
         containerID: cid,
         containerName: cname,
@@ -160,10 +156,8 @@ async function upgradeText(cid: number, cname: string, content: string): Promise
         contentOffset: 0,
         contentLength: 0,
       }),
-    );
-  } catch (e) {
-    log.warn('textContainerUpgrade failed', { error: String(e), cid });
-  }
+    ),
+  );
 }
 
 function renderAssistant(): void {
@@ -352,11 +346,7 @@ function handleError(frame: ErrorFrame): void {
 
 async function maybeBringToFront(): Promise<void> {
   if (!backgrounded || !bridge) return;
-  try {
-    await bridge.callEvenApp('bringToFront');
-  } catch (e) {
-    log.warn('callEvenApp bringToFront failed', { error: String(e) });
-  }
+  await runBridge('callEvenApp', () => bridge!.callEvenApp('bringToFront'));
 }
 
 // ===== Touch handlers =======================================================
@@ -372,7 +362,9 @@ async function toggleMic(): Promise<void> {
 
   if (isCapturing) {
     setStatus('Listening...');
-    const ok = await bridge.audioControl(true, AudioInputSource.Glasses);
+    const ok = await runBridge('audioControl', () =>
+      bridge!.audioControl(true, AudioInputSource.Glasses),
+    );
     if (!ok) {
       console.warn('[Hermes] audioControl(true) failed');
       isCapturing = false;
@@ -382,7 +374,7 @@ async function toggleMic(): Promise<void> {
     sendFrame(wireAudioStart(), 'audio.start');
   } else {
     setStatus('Processing...');
-    await bridge.audioControl(false);
+    await runBridge('audioControl', () => bridge!.audioControl(false));
     sendFrame(wireAudioStop(), 'audio.stop');
   }
 }
@@ -659,10 +651,12 @@ async function buildPage(): Promise<void> {
     ],
   };
 
-  const result = await bridge.createStartUpPageContainer(
-    new CreateStartUpPageContainer(containers),
+  const result = await runBridge('createStartUpPageContainer', () =>
+    bridge!.createStartUpPageContainer(
+      new CreateStartUpPageContainer(containers),
+    ),
   );
-  const decision = decidePageRender(startupRendered, Number(result));
+  const decision = decidePageRender(startupRendered, Number(result ?? -1));
   startupRendered = true;
 
   switch (decision) {
@@ -671,7 +665,7 @@ async function buildPage(): Promise<void> {
       return;
     case 'first-nonsuccess':
       log.info('createStartUpPageContainer non-success, assuming already initialized', {
-        result: Number(result),
+        result: result === undefined ? 'timeout' : Number(result),
       });
       return;
     case 'already-initialized':
@@ -707,7 +701,7 @@ function registerEventHandler(): void {
           // user can still cancel. If they confirm, the SDK fires
           // SYSTEM_EXIT_EVENT (7) and cleanup runs in cleanupAndExit() below.
           if (bridge) {
-            void bridge.shutDownPageContainer(1);
+            void runBridge('shutDownPageContainer', () => bridge!.shutDownPageContainer(1));
           }
           break;
         case OsEventTypeList.FOREGROUND_ENTER_EVENT:
@@ -765,7 +759,7 @@ function cleanupAndExit(): void {
   }
 
   if (isCapturing && bridge) {
-    void bridge.audioControl(false);
+    void runBridge('audioControl', () => bridge!.audioControl(false));
   }
   if (ws) {
     ws.close();
