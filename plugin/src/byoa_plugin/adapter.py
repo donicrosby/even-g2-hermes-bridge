@@ -284,17 +284,6 @@ class EvenG2Adapter(BasePlatformAdapter):
 
         await self.registry.send_frame(chat_id, proto.transcript(text))
         LOG.info("inbound voice chat_id=%s transcript=%r", chat_id, text[:80])
-        event = MessageEvent(
-            text=text,
-            message_type=MessageType.VOICE,
-            source=self.build_source(chat_id=chat_id, user_id=self.platform.value or "g2"),
-        )
-        LOG.info("handle_message start chat_id=%s text=%r", chat_id, text[:80])
-        try:
-            await self.handle_message(event)
-            LOG.info("handle_message returned chat_id=%s", chat_id)
-        except Exception:
-            LOG.exception("handle_message crashed chat_id=%s", chat_id)
 
     def _on_sessions_list(self, chat_id: str) -> None:
         """Respond with local session list AND forward /sessions to gateway."""

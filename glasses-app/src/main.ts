@@ -11,6 +11,7 @@ import {
 
 import {
   hello as wireHello,
+  text as wireText,
   audioStart as wireAudioStart,
   audioStop as wireAudioStop,
   audioData as wireAudioData,
@@ -47,6 +48,7 @@ import {
   STATE_KEY,
   type GlassesAppState,
   type SessionItem,
+  type VoiceConfirmMode,
 } from './lib/state';
 
 // ===== Configuration =======================================================
@@ -85,6 +87,8 @@ let authFailed = false;
 
 let bridgeUrl = '';
 let bridgeToken = '';
+let voiceConfirmMode: VoiceConfirmMode = 'careful';
+let voiceAutoSendSec = 15;
 let accumulatedAssistantText = '';
 let currentSessionId = '';
 let currentSessionName = '';
@@ -92,6 +96,8 @@ let isCapturing = false;
 let backgrounded = false;
 let lastTranscript = '';
 let knownSessions: SessionItem[] = [];
+let pendingTranscript: string | null = null;
+let autoSendTimer: ReturnType<typeof setTimeout> | null = null;
 
 // One-shot per WebView session: matches the SDK's createStartUpPageContainer
 // contract. Reloading the page re-triggers the destructive-rebuild bug.
@@ -115,6 +121,8 @@ async function restoreState(): Promise<void> {
     const merged = mergeState(currentMutableState(), parseState(raw));
     bridgeUrl = merged.bridgeUrl;
     bridgeToken = merged.bridgeToken;
+    voiceConfirmMode = merged.voiceConfirmMode;
+    voiceAutoSendSec = merged.voiceAutoSendSec;
     accumulatedAssistantText = merged.accumulatedAssistantText;
     currentSessionId = merged.currentSessionId;
     currentSessionName = merged.currentSessionName;
@@ -128,6 +136,8 @@ function currentMutableState(): GlassesAppState {
   return {
     bridgeUrl,
     bridgeToken,
+    voiceConfirmMode,
+    voiceAutoSendSec,
     accumulatedAssistantText,
     currentSessionId,
     currentSessionName,
@@ -336,8 +346,45 @@ function handleToolEnd(_frame: ToolEndFrame): void {
 
 function handleTranscript(frame: TranscriptFrame): void {
   lastTranscript = frame.text || '';
-  setStatus(`You said: ${lastTranscript}`);
   scheduleSave();
+
+  if (voiceConfirmMode === 'fast') {
+    sendFrame(wireText(lastTranscript), 'text');
+    return;
+  }
+
+  pendingTranscript = lastTranscript;
+  void upgradeText(ASSISTANT_CID, ASSISTANT_CNAME, `You said:\n${lastTranscript}`);
+  void upgradeText(STATUS_CID, STATUS_CNAME, '>Confirm  Retry');
+
+  if (autoSendTimer) clearTimeout(autoSendTimer);
+  if (voiceAutoSendSec > 0) {
+    autoSendTimer = setTimeout(() => {
+      confirmTranscript();
+    }, voiceAutoSendSec * 1000);
+  }
+}
+
+function confirmTranscript(): void {
+  if (pendingTranscript === null) return;
+  const text = pendingTranscript;
+  clearTranscriptOverlay();
+  sendFrame(wireText(text), 'text');
+}
+
+function retryTranscript(): void {
+  clearTranscriptOverlay();
+  void toggleMic();
+}
+
+function clearTranscriptOverlay(): void {
+  pendingTranscript = null;
+  if (autoSendTimer) {
+    clearTimeout(autoSendTimer);
+    autoSendTimer = null;
+  }
+  renderAssistant();
+  setStatus('Listening...');
 }
 
 function handleTurnDone(): void {
@@ -494,6 +541,15 @@ function showConfigScreen(): void {
       <label style="display:block;font-size:11px;font-weight:500;text-transform:uppercase;
         letter-spacing:0.04em;color:${EVEN_COLORS.textDim};margin:0 0 4px">Token</label>
       <input id="hermes-token" type="password" value="${existing.token}" placeholder="bridge token" style="${inputStyle}" />
+      <label style="display:block;font-size:11px;font-weight:500;text-transform:uppercase;
+        letter-spacing:0.04em;color:${EVEN_COLORS.textDim};margin:0 0 4px">Voice Confirmation</label>
+      <select id="hermes-voice-mode" style="${inputStyle}">
+        <option value="careful" ${voiceConfirmMode === 'careful' ? 'selected' : ''}>Careful — show transcript before sending</option>
+        <option value="fast" ${voiceConfirmMode === 'fast' ? 'selected' : ''}>Fast — send immediately</option>
+      </select>
+      <label style="display:block;font-size:11px;font-weight:500;text-transform:uppercase;
+        letter-spacing:0.04em;color:${EVEN_COLORS.textDim};margin:0 0 4px">Auto-send (seconds, 0 = off)</label>
+      <input id="hermes-autosend" type="number" value="${voiceAutoSendSec}" min="0" max="120" style="${inputStyle}" />
       <div style="display:flex;gap:8px;margin-top:8px">
         <button id="hermes-save-btn" style="${btnBase};background:${EVEN_COLORS.accent};color:${EVEN_COLORS.textOnAccent}">
           ${hasExisting ? 'Save & Reconnect' : 'Connect'}
@@ -555,6 +611,10 @@ function showConfigScreen(): void {
 
     bridgeUrl = urlVal;
     bridgeToken = tokenVal;
+    const modeSelect = document.getElementById('hermes-voice-mode') as HTMLSelectElement | null;
+    const autoSendInput = document.getElementById('hermes-autosend') as HTMLInputElement | null;
+    if (modeSelect) voiceConfirmMode = modeSelect.value as VoiceConfirmMode;
+    if (autoSendInput) voiceAutoSendSec = Math.max(0, parseInt(autoSendInput.value, 10) || 0);
     void saveState();
 
     form.remove();
@@ -773,6 +833,15 @@ async function buildPage(): Promise<void> {
 function registerEventHandler(): void {
   if (!bridge) return;
   unsubscribeEvents = bridge.onEvenHubEvent((event) => {
+    if (pendingTranscript !== null) {
+      if (event.sysEvent && (event.sysEvent.eventType ?? 0) === OsEventTypeList.CLICK_EVENT) {
+        confirmTranscript();
+      } else if (event.textEvent && (event.textEvent.eventType ?? 0) === OsEventTypeList.SCROLL_BOTTOM_EVENT) {
+        retryTranscript();
+      }
+      return;
+    }
+
     if (event.audioEvent) {
       handleAudioPcm(event.audioEvent.audioPcm);
       return;

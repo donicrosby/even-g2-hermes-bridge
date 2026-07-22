@@ -10,6 +10,8 @@ import {
 const empty: GlassesAppState = {
   bridgeUrl: '',
   bridgeToken: '',
+  voiceConfirmMode: 'careful',
+  voiceAutoSendSec: 15,
   accumulatedAssistantText: '',
   currentSessionId: '',
   currentSessionName: '',
@@ -20,6 +22,8 @@ const empty: GlassesAppState = {
 const populated: GlassesAppState = {
   bridgeUrl: 'wss://hermes.example.com',
   bridgeToken: 'secret-token',
+  voiceConfirmMode: 'fast',
+  voiceAutoSendSec: 0,
   accumulatedAssistantText: 'Hello world',
   currentSessionId: 'sess-1',
   currentSessionName: 'First chat',
