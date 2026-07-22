@@ -15,6 +15,8 @@ export type SessionItem = {
 
 /** Mutable state tracked across background transitions. */
 export type GlassesAppState = {
+  bridgeUrl: string;
+  bridgeToken: string;
   accumulatedAssistantText: string;
   currentSessionId: string;
   currentSessionName: string;
@@ -36,6 +38,8 @@ type PartialState = {
  */
 export function serializeState(state: GlassesAppState): string {
   return JSON.stringify({
+    bridgeUrl: state.bridgeUrl,
+    bridgeToken: state.bridgeToken,
     accumulatedAssistantText: state.accumulatedAssistantText,
     currentSessionId: state.currentSessionId,
     currentSessionName: state.currentSessionName,
@@ -71,6 +75,8 @@ export function mergeState(
 ): GlassesAppState {
   if (!snapshot) return { ...target };
   return {
+    bridgeUrl: snapshot.bridgeUrl ?? target.bridgeUrl,
+    bridgeToken: snapshot.bridgeToken ?? target.bridgeToken,
     accumulatedAssistantText: snapshot.accumulatedAssistantText ?? target.accumulatedAssistantText,
     currentSessionId: snapshot.currentSessionId ?? target.currentSessionId,
     currentSessionName: snapshot.currentSessionName ?? target.currentSessionName,

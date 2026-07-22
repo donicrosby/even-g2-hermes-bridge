@@ -8,6 +8,8 @@ import {
 } from '../src/lib/state';
 
 const empty: GlassesAppState = {
+  bridgeUrl: '',
+  bridgeToken: '',
   accumulatedAssistantText: '',
   currentSessionId: '',
   currentSessionName: '',
@@ -16,6 +18,8 @@ const empty: GlassesAppState = {
 };
 
 const populated: GlassesAppState = {
+  bridgeUrl: 'wss://hermes.example.com',
+  bridgeToken: 'secret-token',
   accumulatedAssistantText: 'Hello world',
   currentSessionId: 'sess-1',
   currentSessionName: 'First chat',

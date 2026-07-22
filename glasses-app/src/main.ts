@@ -52,10 +52,7 @@ import {
 // ===== Configuration =======================================================
 
 function getConfig(): { url: string; token: string } {
-  return {
-    url: localStorage.getItem('bridge_url') || '',
-    token: localStorage.getItem('bridge_token') || '',
-  };
+  return { url: bridgeUrl, token: bridgeToken };
 }
 
 function isConfigured(): boolean {
@@ -86,6 +83,8 @@ let ws: WebSocket | null = null;
 let reconnectAttempts = 0;
 let authFailed = false;
 
+let bridgeUrl = '';
+let bridgeToken = '';
 let accumulatedAssistantText = '';
 let currentSessionId = '';
 let currentSessionName = '';
@@ -114,6 +113,8 @@ async function restoreState(): Promise<void> {
   if (!raw) return;
   try {
     const merged = mergeState(currentMutableState(), parseState(raw));
+    bridgeUrl = merged.bridgeUrl;
+    bridgeToken = merged.bridgeToken;
     accumulatedAssistantText = merged.accumulatedAssistantText;
     currentSessionId = merged.currentSessionId;
     currentSessionName = merged.currentSessionName;
@@ -125,6 +126,8 @@ async function restoreState(): Promise<void> {
 
 function currentMutableState(): GlassesAppState {
   return {
+    bridgeUrl,
+    bridgeToken,
     accumulatedAssistantText,
     currentSessionId,
     currentSessionName,
@@ -550,8 +553,9 @@ function showConfigScreen(): void {
       return;
     }
 
-    localStorage.setItem('bridge_url', urlVal);
-    localStorage.setItem('bridge_token', tokenVal);
+    bridgeUrl = urlVal;
+    bridgeToken = tokenVal;
+    void saveState();
 
     form.remove();
     if (ws) {
@@ -817,6 +821,20 @@ async function init(): Promise<void> {
   bridge = await waitForEvenAppBridge();
   log.info('bridge_ready');
 
+  await restoreState();
+  log.info('state_restored');
+
+  const legacyUrl = localStorage.getItem('bridge_url');
+  const legacyToken = localStorage.getItem('bridge_token');
+  if (legacyUrl && !bridgeUrl) {
+    bridgeUrl = legacyUrl;
+    bridgeToken = legacyToken || '';
+    void saveState();
+    localStorage.removeItem('bridge_url');
+    localStorage.removeItem('bridge_token');
+    log.info('migrated_credentials_from_localStorage');
+  }
+
   if (!isConfigured()) {
     log.info('init_not_configured — showing config screen');
     await buildPage();
@@ -824,9 +842,7 @@ async function init(): Promise<void> {
     return;
   }
 
-  log.info('init_configured — restoring state + connecting');
-  await restoreState();
-  log.info('state_restored');
+  log.info('init_configured — connecting');
   await buildPage();
   log.info('page_built');
   injectPhoneChrome();
