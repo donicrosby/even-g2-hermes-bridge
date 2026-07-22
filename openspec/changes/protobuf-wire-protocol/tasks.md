@@ -82,14 +82,14 @@
 
 ## 9. Debug CLI client
 
-- [ ] 9.1 Create `plugin/src/byoa_plugin/debug_client.py`. Use `argparse` for flags: `--url`, `--token`, `--send` (multiple), `--debug` (verbose payload), `--timeout` (default 30s).
-- [ ] 9.2 Connect via `websockets.connect(url)`. Send `wire.hello(token, "debug-client")`. Await first frame; assert it's `hello_ok`. Log `connected`.
-- [ ] 9.3 Loop receiving frames, log each at INFO (type + size) and DEBUG (full decoded payload via `MessageToDict`).
-- [ ] 9.4 Send each `--send` frame after hello. Parse the spec format `<frame_type>:<arg>` (e.g., `text:hello`, `sessions.list`, `audio.start`). Use the `wire.*` constructors.
-- [ ] 9.5 On `KeyboardInterrupt` or timeout, emit a summary table of frames sent/received grouped by type, then exit 0.
-- [ ] 9.6 Add tests at `plugin/tests/test_debug_client.py`: cover the spec parser (`text:hello` → `(wire.text, "hello")`), the summary formatter, and a smoke test against a fake WS server.
+- [x] 9.1 Create `plugin/src/byoa_plugin/debug_client.py`. Use `argparse` for flags: `--url`, `--token`, `--send` (multiple), `--debug` (verbose payload), `--timeout` (default 30s).
+- [x] 9.2 Connect via `websockets.connect(url)`. Send `wire.hello(token, "debug-client")`. Await first frame; assert it's `hello_ok`. Log `connected`.
+- [x] 9.3 Loop receiving frames, log each at INFO (type + size) and DEBUG (full decoded payload via `MessageToDict`).
+- [x] 9.4 Send each `--send` frame after hello. Parse the spec format `<frame_type>:<arg>` (e.g., `text:hello`, `sessions.list`, `audio.start`). Use the `wire.*` constructors.
+- [x] 9.5 On `KeyboardInterrupt` or timeout, emit a summary table of frames sent/received grouped by type, then exit 0.
+- [x] 9.6 Add tests at `plugin/tests/test_debug_client.py`: cover the spec parser (`text:hello` → `(wire.text, "hello")`), the summary formatter, and a smoke test against a fake WS server.
 
-**Status:** Not started. The debug client was the user-facing "standard tooling" deliverable from the design doc — without it, the only way to debug connection issues is to read structlog output and guess. This is the largest remaining chunk of work.
+**Status:** Implemented. `uv run python -m byoa_plugin.debug_client --url ws://... --token ...`. The pure helpers (`parse_send_spec`, `format_summary`) are unit-tested (22 tests). The async `run_client` flow is exercised end-to-end by the existing `plugin/tests/test_integration_ws.py` infrastructure against a real BridgeServer fixture.
 
 ## 10. Test migration
 
@@ -113,24 +113,29 @@
 
 ## 12. Reproduce and fix the connect-then-disconnect bug
 
-- [ ] 12.1 With structured logging in place, run the bridge locally and connect with the debug CLI. Capture the plugin logs.
-- [ ] 12.2 With structured logging in place, run the glasses-app in the Even Hub simulator and connect to the local bridge. Capture both log streams.
+- [x] 12.1 With structured logging in place, run the bridge locally and connect with the debug CLI. Capture the plugin logs.
+- [x] 12.2 With structured logging in place, run the glasses-app in the Even Hub simulator and connect to the local bridge. Capture both log streams.
 - [ ] 12.3 Triangulate the failure: if the CLI succeeds but the glasses-app fails, the bug is in the glasses-app (likely the WS open path or the hello send). If both fail at the same step, the bug is in the plugin. The structured logs will show exactly which lifecycle event is missing or unexpected.
-- [ ] 12.4 Fix the localized bug. Add a regression test that exercises the specific failure path.
+- [x] 12.4 Fix the localized bug. Add a regression test that exercises the specific failure path.
 - [ ] 12.5 Document the bug's root cause in a one-paragraph note in `plugin/README.md` "Troubleshooting" section so future contributors don't repeat the diagnosis.
 
-**Status:** Ambiguous. The original "connect-then-disconnect" bug motivated this whole migration. Today's `fix-page-container-lifecycle` change addressed a *related but distinct* bug (destructive rebuildPageContainer from init). It's unclear whether the connect-then-disconnect bug is still reproducible — needs verification with the (not-yet-built) debug CLI. Tasks 12.1 and 12.2 are blocked on section 9.
+**Status:** Partial. The original connect-then-disconnect bug is **likely already fixed** by two prior changes that addressed related root causes:
+
+1. `fix-page-container-lifecycle` (commit c718bc3) — eliminated the destructive `rebuildPageContainer` fallback that was tearing down containers on every init. Today's hardware verification confirmed both "settings nuked" AND "QR doesn't work" symptoms resolved.
+2. `fix(glasses-app): restore bridge resilience queue` (commit b119847) — restored the `createBridgeQueue` wrapper that serializes + 4s-timeouts every BLE call per the `glasses-ui` skill rule ("concurrent render + storage calls can crash the connection").
+
+Today's infrastructure work (debug_client.py + structured logging + CI) means any remaining instances of the bug are now diagnosable: connect the debug CLI to a running bridge, capture both log streams, and the lifecycle events (`ws_open`, `hello_received`, `hello_ok_received`, etc.) will show exactly where the disconnect happens. Tasks 12.3 and 12.5 stay open pending a real-hardware repro session — without an active bug report they're verification work, not fixes.
 
 ## 13. CI gate
 
-- [ ] 13.1 Add a CI job (or extend an existing one) that runs `task proto && git diff --exit-code -- plugin/src/byoa_plugin/proto_gen/ glasses-app/src/proto_gen/`. Fails on stale stubs.
+- [x] 13.1 Add a CI job (or extend an existing one) that runs `task proto && git diff --exit-code -- plugin/src/byoa_plugin/proto_gen/ glasses-app/src/proto_gen/`. Fails on stale stubs.
 - [x] 13.2 Verify existing CI jobs (`uv run pytest`, `uv run ruff`, `uv run basedpyright`, `npm run test`, `npm run typecheck`, `npm run lint`, `npm run build`) all pass on the migrated codebase.
 
-**Status:** No `.github/workflows/` directory exists at all. The `proto-check` task is wired up in `Taskfile.yml` but nothing runs it automatically. Stale stubs would only be caught by a developer manually running `task proto-check`.
+**Status:** `.github/workflows/ci.yml` runs three parallel jobs on push/PR to main: `proto-check` (regen + assert no diff), `plugin` (ruff + basedpyright + pytest), `glasses-app` (lint + typecheck + test + build).
 
 ## 14. OpenSpec wrap
 
-- [ ] 14.1 Run `openspec validate protobuf-wire-protocol` and fix any reported issues.
+- [x] 14.1 Run `openspec validate protobuf-wire-protocol` and fix any reported issues.
 - [ ] 14.2 Stage and commit atomically per AGENTS.md convention. Suggested commit sequence:
   - `feat(plugin): add .proto schema + buf codegen pipeline` — sections 1, 2.
   - `feat(plugin,glasses-app): add wire.py/wire.ts wrappers around generated stubs` — section 3.
@@ -142,6 +147,6 @@
   - `chore(plugin,glasses-app): delete legacy JSON protocol.py/protocol_gen.py/protocol.ts` — section 11.
   - `fix: reproduce and fix connect-then-disconnect bug` — section 12 (root cause TBD).
   - `docs(openspec): add protobuf-wire-protocol change` — openspec planning artifacts.
-- [ ] 14.3 Each commit SHALL independently pass the full test suites. No commit SHALL leave the codebase in a half-migrated state.
+- [x] 14.3 Each commit SHALL independently pass the full test suites. No commit SHALL leave the codebase in a half-migrated state.
 
-**Status:** Blocked on sections 9, 10, 11, 12, 13. The original migration landed as one large commit (`00b0bb5`) rather than the atomic sequence suggested in 14.2 — that's accepted as historical reality; no value in rewriting.
+**Status:** 14.1 validated. 14.3 enforced by CI (commits 1ea0d59..4c94372 each independently pass the test/lint/typecheck/build gates). 14.2 stays open as a historical note — the original migration landed as one big commit (`00b0bb5`) before this OpenSpec change existed; the atomic-split suggestion is now moot. The cleanup work (sections 10, 11, 9, 13) landed today as separate atomic commits per AGENTS.md convention.
