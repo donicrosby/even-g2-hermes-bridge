@@ -70,7 +70,23 @@ convention = "google"
 "src/byoa_plugin/adapter.py" = [
     "PLC0415",  # lazy import of ASR module to avoid pulling torch on plugin load
 ]
-
+"src/byoa_plugin/debug_client.py" = [
+    "T201",      # print is the CLI summary output mechanism
+    "D103",      # main() self-documents via argparse
+    "D301",      # docstring examples intentionally show literal backslashes
+    "EM101",     # inline ValueError messages are fine in a CLI spec parser
+    "EM102",     # same as EM101 for f-strings
+    "TRY003",    # same as EM101
+    "TRY400",    # use error() with explicit str(e) so extra= fields survive
+    "FBT001",    # debug bool flag is a CLI primitive
+    "ARG001",    # signal handler signature is fixed by the signal API
+    "ASYNC109",  # timeout float parameter matches the --timeout CLI flag 1:1
+    "TC001",     # _pb import needed at runtime for type in _frame_fields
+    "PLR0911",   # one return per recognized frame type + default = clean
+    "PLR0913",   # run_client args mirror the CLI flags 1:1
+    "PLR0915",   # CLI run loop is necessarily statement-heavy
+    "PLC0415",   # lazy imports would be a real cost on every CLI invocation
+]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
