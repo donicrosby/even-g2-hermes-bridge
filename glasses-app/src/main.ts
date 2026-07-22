@@ -619,6 +619,7 @@ function showConfigScreen(): void {
     void saveState();
 
     form.remove();
+    injectPhoneChrome();
     if (ws) {
       ws.close();
       ws = null;
