@@ -79,7 +79,7 @@ async def bridge_server(
     )
     await server.start()
 
-    actual_port = server._server.sockets[0].getsockname()[1]
+    actual_port = server.bound_port
     url = f"ws://127.0.0.1:{actual_port}"
 
     yield SimpleNamespace(

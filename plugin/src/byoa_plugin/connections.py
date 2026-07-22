@@ -16,12 +16,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import anyio
-from websockets.exceptions import ConnectionClosed
 
 from byoa_plugin import wire as proto
 
 if TYPE_CHECKING:
-    from websockets.asyncio.server import ServerConnection
+    from aiohttp.web import WebSocketResponse
 
 LOG = logging.getLogger("byoa_plugin.connections")
 
@@ -71,10 +70,10 @@ class ConnectionRegistry:
 
     def __init__(self) -> None:
         """Initialize the in-memory connection map and lock."""
-        self._conns: dict[str, tuple[ServerConnection, StreamState]] = {}
+        self._conns: dict[str, tuple[WebSocketResponse, StreamState]] = {}
         self._lock = anyio.Lock()
 
-    async def register(self, chat_id: str, ws: ServerConnection) -> StreamState:
+    async def register(self, chat_id: str, ws: WebSocketResponse) -> StreamState:
         """Register a new connection. Returns the StreamState for this chat.
 
         If an existing connection exists for chat_id and its socket differs,
@@ -98,7 +97,7 @@ class ConnectionRegistry:
                 LOG.info("registered chat_id=%s", chat_id)
             return state
 
-    async def unregister(self, chat_id: str, ws: ServerConnection) -> None:
+    async def unregister(self, chat_id: str, ws: WebSocketResponse) -> None:
         """Unregister a connection only if `ws` matches the registered one.
 
         Prevents a reconnect race where:
@@ -120,7 +119,7 @@ class ConnectionRegistry:
             del self._conns[chat_id]
             LOG.info("unregistered chat_id=%s", chat_id)
 
-    def get(self, chat_id: str) -> ServerConnection | None:
+    def get(self, chat_id: str) -> WebSocketResponse | None:
         """Return the active socket for `chat_id`, if one exists."""
         entry = self._conns.get(chat_id)
         return entry[0] if entry is not None else None
@@ -150,8 +149,8 @@ class ConnectionRegistry:
             return False
         ws, _ = entry
         try:
-            await ws.send(frame)
-        except (ConnectionClosed, OSError) as e:
+            await ws.send_bytes(frame)
+        except (RuntimeError, OSError, ConnectionResetError) as e:
             LOG.warning(
                 "send_frame failed for chat_id=%s: %s — unregistering",
                 chat_id,

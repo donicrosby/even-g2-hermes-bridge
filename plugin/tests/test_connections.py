@@ -23,7 +23,7 @@ class FakeWS:
         self.fail_send = fail_send
         self.sent: list[str] = []
 
-    async def send(self, frame: str) -> None:
+    async def send_bytes(self, frame: str) -> None:
         if self.fail_send:
             raise OSError(_SEND_FAILURE_MSG)
         self.sent.append(frame)

@@ -4,11 +4,11 @@ version = "0.1.0"
 description = "Hermes platform plugin for Even Realities G2 smart glasses"
 requires-python = ">=3.11"
 dependencies = [
-    "websockets>=16.0",
+    "aiohttp>=3.10",
     "numpy>=1.26.0",
     "faster-whisper>=1.2.1",
     "qrcode>=7.4",
-    "pillow>=10.0",
+    "pillow>=10.0.0",
     "httpx>=0.27.0",
     "anyio>=4.14.2",
     "protobuf>=7.35.1",
@@ -20,6 +20,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.6",
     "basedpyright>=0.10",
+    "websockets>=16.0",
 ]
 
 [build-system]
@@ -39,6 +40,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",      # assert is the test mechanism
+    "S106",      # test tokens are hardcoded by design
     "PLR2004",   # magic values are test data
     "SLF001",    # tests intentionally access private members
     "ARG001",    # fixtures requested for side effects (reset_env, hermes_home)
@@ -52,6 +54,8 @@ convention = "google"
     "D103",      # test fixtures/helpers self-document via name
     "D105",      # magic methods
     "D107",      # __init__
+    "E501",      # test helper signatures can be long
+    "SIM117",    # nested async-with is the aiohttp client pattern
 ]
 "src/byoa_plugin/cli.py" = [
     "T201",     # print() is the CLI output mechanism
@@ -69,6 +73,20 @@ convention = "google"
 ]
 "src/byoa_plugin/adapter.py" = [
     "PLC0415",  # lazy import of ASR module to avoid pulling torch on plugin load
+]
+"src/byoa_plugin/server.py" = [
+    "PLR0912",  # WS dispatch has one branch per frame type — clean
+    "PLR0915",  # same: one statement per frame type
+    "PLR0911",  # one return per error/edge case + success path
+    "TRY300",   # explicit return inside try is clearer than else-after-except
+    "PLR2004",  # gzip threshold 512 matches GZipMiddleware default
+    "SLF001",   # bound_port accesses _site._server (aiohttp internal)
+    "E501",     # match/case branches with long LOG.info lines
+]
+"src/byoa_plugin/http_endpoints.py" = [
+    "PLR0911",   # one return per error/edge case + success path — readable
+    "TRY300",    # explicit return inside try is clearer than else-after-except
+    "PLR2004",   # gzip threshold 512 matches FastAPI GZipMiddleware default
 ]
 "src/byoa_plugin/debug_client.py" = [
     "T201",      # print is the CLI summary output mechanism

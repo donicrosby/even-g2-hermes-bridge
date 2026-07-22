@@ -51,7 +51,7 @@ async def bridge_server_with_lookup(
         active_session_lookup=lookup,
     )
     await server.start()
-    actual_port = server._server.sockets[0].getsockname()[1]
+    actual_port = server.bound_port
     url = f"ws://127.0.0.1:{actual_port}"
     yield SimpleNamespace(cfg=cfg, url=url)
     await server.stop()

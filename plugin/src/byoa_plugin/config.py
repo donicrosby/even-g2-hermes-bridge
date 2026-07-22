@@ -23,6 +23,7 @@ class BridgeConfig:
     ws_host: str = "127.0.0.1"
     ws_port: int = 8767
     public_url: str = ""
+    byoa_token: str = ""
 
     # Network exposure mode: "tailscale" (auto-serve), "reverse-proxy" (user
     # provides their own), or "lan" (direct bind, plaintext, dev only).
@@ -50,6 +51,7 @@ class BridgeConfig:
         host = os.getenv("EVEN_G2_BRIDGE_HOST", "127.0.0.1").strip()
         port = int(os.getenv("EVEN_G2_BRIDGE_PORT", "8767").strip() or "8767")
         public = os.getenv("EVEN_G2_BRIDGE_PUBLIC_URL", "").strip()
+        byoa_token = os.getenv("BYOA_TOKEN", "").strip()
         serve_port = int(os.getenv("EVEN_G2_BRIDGE_SERVE_PORT", "8443").strip() or "8443")
         net_mode = os.getenv("EVEN_G2_BRIDGE_NET", "tailscale").strip().lower()
         if net_mode not in {"tailscale", "reverse-proxy", "lan"}:
@@ -78,6 +80,7 @@ class BridgeConfig:
             ws_host=host,
             ws_port=port,
             public_url=public,
+            byoa_token=byoa_token,
             net_mode=net_mode,
             tailscale_serve_port=serve_port,
             asr_litellm_model=asr_litellm_model,

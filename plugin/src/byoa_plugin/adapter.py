@@ -168,6 +168,10 @@ class EvenG2Adapter(BasePlatformAdapter):
         # chat_id → session_id mapping (Hermes owns sessions; we just route).
         self._session_by_chat: dict[str, str] = {}
 
+        # Pending BYOA futures: chat_id → Future that resolves with the full
+        # assistant response when edit_message(finalize=True) fires.
+        self._byoa_futures: dict[str, asyncio.Future[str]] = {}
+
         # v1 limitation: plugin session hooks don't receive chat_id in their
         # payload (verified upstream contract), so we attribute session events
         # to whatever chat_id most recently sent an inbound frame. Single-pair
@@ -204,6 +208,7 @@ class EvenG2Adapter(BasePlatformAdapter):
             on_stop=self._on_stop,
             active_session_lookup=self.session_for_chat,
         )
+        self._server.set_adapter(self)
         await self._server.start()
         self._mark_connected()
 
@@ -322,7 +327,8 @@ class EvenG2Adapter(BasePlatformAdapter):
 
     def _on_sessions_switch(self, chat_id: str, target: str) -> None:
         """Handle session switch. Relative offsets (+1/-1) are resolved locally;
-        absolute session IDs are forwarded to the gateway."""
+        absolute session IDs are forwarded to the gateway.
+        """
         self._last_chat_id = chat_id
         if target.startswith(("+", "-")):
             self._spawn(self._emit_sessions_frame(chat_id))
@@ -388,11 +394,32 @@ class EvenG2Adapter(BasePlatformAdapter):
                 return SendResult(success=False, error="no active connection")
         if finalize:
             await self.registry.send_frame(chat_id, proto.turn_done())
+            fut = self._byoa_futures.pop(chat_id, None)
+            if fut and not fut.done():
+                fut.set_result(content)
         return SendResult(success=True, message_id=message_id)
 
     async def get_chat_info(self, chat_id: str) -> dict[str, Any]:
         """Return minimal chat metadata for the gateway."""
         return {"name": chat_id, "type": "dm"}
+
+    def register_byoa_future(self, chat_id: str) -> asyncio.Future[str]:
+        """Register a Future that resolves when the BYOA turn for chat_id finalizes.
+
+        The BYOA HTTPS handler calls this before dispatching handle_message,
+        then awaits the future to block until the gateway has finished
+        streaming the response. edit_message(finalize=True) resolves it.
+        """
+        loop = asyncio.get_event_loop()
+        fut: asyncio.Future[str] = loop.create_future()
+        self._byoa_futures[chat_id] = fut
+        return fut
+
+    def cancel_byoa_future(self, chat_id: str) -> None:
+        """Cancel and remove a pending BYOA future (e.g., on timeout)."""
+        fut = self._byoa_futures.pop(chat_id, None)
+        if fut and not fut.done():
+            fut.cancel()
 
     # ---- Session tracking --------------------------------------------------
 
