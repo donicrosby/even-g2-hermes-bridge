@@ -16,12 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: bufbuild/buf-setup-action@v1
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: glasses-app/package-lock.json
-      - name: Install glasses-app deps (provides buf + ts-proto)
+      - name: Install glasses-app deps (provides ts-proto)
         run: npm ci
         working-directory: glasses-app
       - uses: astral-sh/setup-uv@v3
@@ -30,8 +31,6 @@ jobs:
       - name: Install plugin deps (provides protoc-gen-mypy)
         run: uv sync --all-extras
         working-directory: plugin
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - name: Regenerate stubs
         run: |
           export PATH="$GITHUB_WORKSPACE/plugin/.venv/bin:$GITHUB_WORKSPACE/glasses-app/node_modules/.bin:$PATH"
