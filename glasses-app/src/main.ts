@@ -354,6 +354,7 @@ function handleTranscript(frame: TranscriptFrame): void {
   }
 
   pendingTranscript = lastTranscript;
+  void maybeBringToFront();
   void upgradeText(ASSISTANT_CID, ASSISTANT_CNAME, `You said:\n${lastTranscript}`);
   void upgradeText(STATUS_CID, STATUS_CNAME, '>Confirm  Retry');
 
