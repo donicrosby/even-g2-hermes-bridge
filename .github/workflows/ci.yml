@@ -30,6 +30,8 @@ jobs:
       - name: Install plugin deps (provides protoc-gen-mypy)
         run: uv sync --all-extras
         working-directory: plugin
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - name: Regenerate stubs
         run: |
           export PATH="$GITHUB_WORKSPACE/plugin/.venv/bin:$GITHUB_WORKSPACE/glasses-app/node_modules/.bin:$PATH"
