@@ -36,6 +36,7 @@ class JsonFormatter(logging.Formatter):
     """Emit each log record as a single line of JSON."""
 
     def format(self, record: logging.LogRecord) -> str:
+        """Render a log record as a compact JSON string."""
         payload: dict[str, Any] = {
             "level": record.levelname.lower(),
             "logger": record.name,
@@ -69,6 +70,7 @@ class StructuredLogger:
     """
 
     def __init__(self, logger: logging.Logger) -> None:
+        """Wrap a stdlib logger."""
         self._logger = logger
 
     def _log(
@@ -85,21 +87,27 @@ class StructuredLogger:
         self._logger.log(level, event)
 
     def debug(self, event: str, *args: Any, **fields: Any) -> None:
+        """Log at DEBUG level."""
         self._log(logging.DEBUG, event, *args, **fields)
 
     def info(self, event: str, *args: Any, **fields: Any) -> None:
+        """Log at INFO level."""
         self._log(logging.INFO, event, *args, **fields)
 
     def warning(self, event: str, *args: Any, **fields: Any) -> None:
+        """Log at WARNING level."""
         self._log(logging.WARNING, event, *args, **fields)
 
     def warn(self, event: str, *args: Any, **fields: Any) -> None:
+        """Alias for warning()."""
         self.warning(event, *args, **fields)
 
     def error(self, event: str, *args: Any, **fields: Any) -> None:
+        """Log at ERROR level."""
         self._log(logging.ERROR, event, *args, **fields)
 
     def exception(self, event: str, *args: Any, **fields: Any) -> None:
+        """Log at ERROR level with exception traceback attached."""
         if not self._logger.isEnabledFor(logging.ERROR):
             return
         if args:

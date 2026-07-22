@@ -58,7 +58,7 @@ async def bridge_server(
     from byoa_plugin.server import BridgeServer
 
     cfg = BridgeConfig(
-        token="integration-test-token",  # noqa: S106
+        token="integration-test-token",
         ws_host="127.0.0.1",
         ws_port=0,
     )

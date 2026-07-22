@@ -34,7 +34,7 @@ async def bridge_server_with_lookup(
     from byoa_plugin.server import BridgeServer
 
     cfg = BridgeConfig(
-        token="active-test-token",  # noqa: S106
+        token="active-test-token",
         ws_host="127.0.0.1",
         ws_port=0,
     )

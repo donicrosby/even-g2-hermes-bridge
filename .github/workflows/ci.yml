@@ -33,7 +33,7 @@ jobs:
       - name: Regenerate stubs
         run: |
           PATH="$PWD/plugin/.venv/bin:$PWD/glasses-app/node_modules/.bin:$PATH" \
-            ./glasses-app/node_modules/.bin/buf generate
+            buf generate
         working-directory: plugin
       - name: Assert no diff
         run: git diff --exit-code -- plugin/src/byoa_plugin/proto_gen/ glasses-app/src/proto_gen/

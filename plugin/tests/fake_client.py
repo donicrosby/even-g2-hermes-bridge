@@ -17,10 +17,11 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 from byoa_plugin import wire
-from byoa_plugin.proto_gen import hermes_bridge_pb2 as _pb
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from byoa_plugin.proto_gen import hermes_bridge_pb2 as _pb
 
 
 class FakeGlassesClient:

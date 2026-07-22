@@ -315,8 +315,10 @@ class EvenG2Adapter(BasePlatformAdapter):
         )
 
     def _on_sessions_switch(self, chat_id: str, target: str) -> None:
-        """Handle session switch. Relative offsets (+1/-1) are resolved locally;
-        absolute session IDs are forwarded to the gateway.
+        """Handle session switch.
+
+        Relative offsets (+1/-1) are resolved locally; absolute session IDs
+        are forwarded to the gateway.
         """
         self._last_chat_id = chat_id
         if target.startswith(("+", "-")):

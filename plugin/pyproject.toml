@@ -30,6 +30,7 @@ build-backend = "uv_build"
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+exclude = ["src/byoa_plugin/proto_gen"]
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -71,8 +72,13 @@ convention = "google"
 "src/byoa_plugin/__init__.py" = [
     "PLC0415",  # lazy imports are the Hermes plugin pattern (deferred adapter/cli)
 ]
+"src/byoa_plugin/log.py" = [
+    "ANN401",   # **fields: Any is the structured-logging API by design
+    "PLW0603",  # global _CONFIGURED is the standard idempotent-init pattern
+]
 "src/byoa_plugin/adapter.py" = [
     "PLC0415",  # lazy import of ASR module to avoid pulling torch on plugin load
+    "SLF001",   # gateway_runner._handle_message is the adapter wiring pattern
 ]
 "src/byoa_plugin/server.py" = [
     "PLR0912",  # WS dispatch has one branch per frame type — clean

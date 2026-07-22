@@ -25,7 +25,7 @@ class TestAuthHandshake:
         self, bridge_server: SimpleNamespace,
     ) -> None:
         url = bridge_server.url
-        async with FakeGlassesClient(url, token="wrong-token") as client:  # noqa: S106
+        async with FakeGlassesClient(url, token="wrong-token") as client:
             await client.send_hello()
             code, _reason = await client.expect_close(timeout=2.0)
         assert code == 1008
