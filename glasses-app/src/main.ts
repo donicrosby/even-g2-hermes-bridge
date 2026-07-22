@@ -185,7 +185,7 @@ function renderSession(): void {
 
 // ===== WebSocket ===========================================================
 
-function connect(): void {
+async function connect(): Promise<void> {
   if (ws || authFailed) return;
   if (!isConfigured()) return;
 
@@ -193,6 +193,20 @@ function connect(): void {
   setStatus('Connecting...');
   log.info('ws_opening', { url });
 
+  let deviceSerial = 'g2';
+  if (bridge) {
+    try {
+      const info = await runBridge('getDeviceInfo', () => bridge!.getDeviceInfo());
+      if (info?.sn) {
+        deviceSerial = info.sn;
+        log.info('device_serial', { sn: deviceSerial });
+      }
+    } catch {
+      log.warn('getDeviceInfo_failed');
+    }
+  }
+
+  const serial = deviceSerial;
   const socket = new WebSocket(url);
   socket.binaryType = 'arraybuffer';
   ws = socket;
@@ -200,7 +214,7 @@ function connect(): void {
   socket.onopen = () => {
     reconnectAttempts = 0;
     log.info('ws_open', { url });
-    const helloBytes = wireHello(token, 'g2');
+    const helloBytes = wireHello(token, serial);
     socket.send(helloBytes.buffer.slice(helloBytes.byteOffset, helloBytes.byteOffset + helloBytes.byteLength));
     log.info('frame', { direction: 'out', frame_type: 'hello', byte_size: helloBytes.byteLength });
   };
@@ -257,7 +271,7 @@ function scheduleReconnect(): void {
   if (authFailed) return;
   const delay = nextBackoffDelay(reconnectAttempts);
   reconnectAttempts += 1;
-  setTimeout(connect, delay);
+  setTimeout(() => void connect(), delay);
 }
 
 function sendFrame(bytes: Uint8Array, frameType: string): void {
@@ -549,7 +563,7 @@ function showConfigScreen(): void {
     setStatus('Connecting...');
     renderAssistant();
     renderSession();
-    connect();
+    void connect();
   });
 
   cancelBtn?.addEventListener('click', () => {
@@ -819,7 +833,7 @@ async function init(): Promise<void> {
   log.info('chrome_injected');
   registerEventHandler();
   log.info('events_registered');
-  connect();
+  void connect();
   log.info('connect_called');
 }
 
