@@ -7,7 +7,7 @@ Guidance for AI agents (and humans) working in this repo.
 This repo bridges Even Realities G2 smart glasses to a Hermes Agent gateway. Two paths exist:
 
 - **Path A (recommended): `plugin/` + `glasses-app/`** — Full WebSocket protocol with streaming text, voice ASR, tool-call events, and session management. The plugin runs inside the Hermes Gateway; the glasses-app runs on the phone.
-- **Path B (legacy): `bridge-server/`** — BYOA lite path using the glasses' built-in Add Agent mode. Simpler but no streaming/tools/sessions. Will be deleted once Path A is stable.
+- **Path B (legacy): `bridge-server/`** — BYOA lite path using the glasses' built-in Add Agent mode. Simpler but no streaming/tools/sessions. **Deprecated** — the plugin now serves the BYOA HTTPS endpoint directly (`POST /v1/chat/completions` on port 8767 via aiohttp). `bridge-server/` will be deleted once the plugin's BYOA endpoint is validated in production.
 
 `probe/` contains throwaway integration test servers from BYOA development.
 

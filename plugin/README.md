@@ -204,6 +204,37 @@ task proto
 
 CI catches stale stubs via `task proto-check`. Commit the regenerated files alongside the `.proto` change.
 
+## BYOA Setup (Even's Add Agent)
+
+The plugin serves a BYOA-compatible HTTPS endpoint alongside the WS server on the same port. This lets you use Even Realities' built-in "Add Agent" mode (which uses Even's on-device ASR for privacy) alongside the custom G2 app.
+
+### Configuration
+
+1. Set `BYOA_TOKEN` in your plugin environment (separate from `EVEN_G2_BRIDGE_TOKEN`):
+   ```bash
+   BYOA_TOKEN=your-byoa-secret
+   ```
+
+2. Configure Even's Add Agent on your phone:
+   - **Agent URL**: `https://<your-plugin-host>:<port>/v1/chat/completions`
+   - **Token**: the value of `BYOA_TOKEN`
+
+3. Restart the plugin (or Hermes Gateway).
+
+### How it works
+
+When you say "Hey Even", Even's Add Agent transcribes your speech on-device and POSTs the text to the plugin's BYOA endpoint. The plugin:
+
+1. Creates/looks up a Hermes session for the `even-add-agent` chat_id
+2. Pushes an `active` frame to any connected G2 app (prepping the display)
+3. Forwards the transcribed text to the LLM via the Hermes Gateway
+
+**Fast responses** (<first-delta latency): the LLM finishes before any streaming frame would have been pushed. The G2 app stays asleep. The Even overlay shows the response.
+
+**Slow responses** (>first-delta latency): the LLM streams at least one `assistant_delta` frame to the G2 app. The G2 app's existing `maybeBringToFront` logic activates it, and the user reads the streaming response there. The Even overlay eventually receives the chat-completion JSON too (late but correct).
+
+No explicit timer — the latency itself decides which surface the user sees.
+
 ## Known limitations (v1)
 
 - **Single-user history**: chat_id keyed by device serial. Multiple users on
