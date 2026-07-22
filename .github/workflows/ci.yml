@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proto-check:
+    name: Proto stubs in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: glasses-app/package-lock.json
+      - name: Install glasses-app deps (provides buf + ts-proto)
+        run: npm ci
+        working-directory: glasses-app
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Install plugin deps (provides protoc-gen-mypy)
+        run: uv sync --all-extras
+        working-directory: plugin
+      - name: Regenerate stubs
+        run: |
+          PATH="$PWD/plugin/.venv/bin:$PWD/glasses-app/node_modules/.bin:$PATH" \
+            ./glasses-app/node_modules/.bin/buf generate
+        working-directory: plugin
+      - name: Assert no diff
+        run: git diff --exit-code -- plugin/src/byoa_plugin/proto_gen/ glasses-app/src/proto_gen/
+
+  plugin:
+    name: Plugin (python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras
+      - run: uv run ruff check src/ tests/
+      - run: uv run basedpyright src/ tests/
+      - run: uv run pytest -q
+
+  glasses-app:
+    name: Glasses-app (typescript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: glasses-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: glasses-app/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
