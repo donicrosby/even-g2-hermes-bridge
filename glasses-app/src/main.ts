@@ -97,6 +97,7 @@ let backgrounded = false;
 let lastTranscript = '';
 let knownSessions: SessionItem[] = [];
 let pendingTranscript: string | null = null;
+let pendingChoiceIndex = 0;
 let autoSendTimer: ReturnType<typeof setTimeout> | null = null;
 
 // One-shot per WebView session: matches the SDK's createStartUpPageContainer
@@ -354,9 +355,10 @@ function handleTranscript(frame: TranscriptFrame): void {
   }
 
   pendingTranscript = lastTranscript;
+  pendingChoiceIndex = 0;
   void maybeBringToFront();
   void upgradeText(ASSISTANT_CID, ASSISTANT_CNAME, `You said:\n${lastTranscript}`);
-  void upgradeText(STATUS_CID, STATUS_CNAME, '>Confirm  Retry');
+  renderPendingChoices();
 
   if (autoSendTimer) clearTimeout(autoSendTimer);
   if (voiceAutoSendSec > 0) {
@@ -364,6 +366,14 @@ function handleTranscript(frame: TranscriptFrame): void {
       confirmTranscript();
     }, voiceAutoSendSec * 1000);
   }
+}
+
+function renderPendingChoices(): void {
+  const options = ['Confirm', 'Retry'];
+  const lines = options.map((opt, i) =>
+    i === pendingChoiceIndex ? `>${opt}` : ` ${opt}`,
+  );
+  void upgradeText(STATUS_CID, STATUS_CNAME, lines.join('\n'));
 }
 
 function confirmTranscript(): void {
@@ -836,10 +846,21 @@ function registerEventHandler(): void {
   if (!bridge) return;
   unsubscribeEvents = bridge.onEvenHubEvent((event) => {
     if (pendingTranscript !== null) {
-      if (event.sysEvent && (event.sysEvent.eventType ?? 0) === OsEventTypeList.CLICK_EVENT) {
-        confirmTranscript();
-      } else if (event.textEvent && (event.textEvent.eventType ?? 0) === OsEventTypeList.SCROLL_BOTTOM_EVENT) {
-        retryTranscript();
+      if (event.textEvent) {
+        const t = event.textEvent.eventType ?? 0;
+        if (t === OsEventTypeList.SCROLL_TOP_EVENT) {
+          pendingChoiceIndex = pendingChoiceIndex === 0 ? 1 : 0;
+          renderPendingChoices();
+        } else if (t === OsEventTypeList.SCROLL_BOTTOM_EVENT) {
+          pendingChoiceIndex = pendingChoiceIndex === 0 ? 1 : 0;
+          renderPendingChoices();
+        }
+      } else if (event.sysEvent) {
+        const t = event.sysEvent.eventType ?? 0;
+        if (t === OsEventTypeList.CLICK_EVENT) {
+          if (pendingChoiceIndex === 0) confirmTranscript();
+          else retryTranscript();
+        }
       }
       return;
     }
