@@ -4,11 +4,9 @@ import {
   waitForEvenAppBridge,
   AudioInputSource,
   OsEventTypeList,
-  StartUpPageCreateResult,
   TextContainerProperty,
   TextContainerUpgrade,
   CreateStartUpPageContainer,
-  RebuildPageContainer,
 } from '@evenrealities/even_hub_sdk';
 
 import {
@@ -32,6 +30,7 @@ import {
 } from './wire';
 import { truncateSessionName } from './lib/session';
 import { nextBackoffDelay } from './lib/reconnect';
+import { sanitizeContent, decidePageRender } from './lib/page-lifecycle';
 import { log, getLogBuffer, clearLogBuffer } from './log';
 import {
   serializeState,
@@ -83,6 +82,11 @@ let isCapturing = false;
 let backgrounded = false;
 let lastTranscript = '';
 let knownSessions: SessionItem[] = [];
+
+// One-shot per WebView session: matches the SDK's createStartUpPageContainer
+// contract. Reloading the page re-triggers the destructive-rebuild bug.
+// See openspec/changes/fix-page-container-lifecycle.
+let startupRendered = false;
 
 let unsubscribeEvents: (() => void) | null = null;
 let cleanupDone = false;
@@ -167,7 +171,9 @@ function renderAssistant(): void {
 }
 
 function setStatus(text: string): void {
-  void upgradeText(STATUS_CID, STATUS_CNAME, text);
+  // Per the `glasses-ui` skill: empty content is silently rejected on real
+  // hardware (stale text remains). sanitizeContent coerces '' → ' '.
+  void upgradeText(STATUS_CID, STATUS_CNAME, sanitizeContent(text));
 }
 
 function renderSession(): void {
@@ -522,7 +528,18 @@ function showConfigScreen(): void {
 
     localStorage.setItem('bridge_url', urlVal);
     localStorage.setItem('bridge_token', tokenVal);
-    location.reload();
+
+    form.remove();
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
+    reconnectAttempts = 0;
+    authFailed = false;
+    setStatus('Connecting...');
+    renderAssistant();
+    renderSession();
+    connect();
   });
 
   cancelBtn?.addEventListener('click', () => {
@@ -595,6 +612,8 @@ function showConfigScreen(): void {
 
 async function buildPage(): Promise<void> {
   if (!bridge) return;
+  if (startupRendered) return;
+
   const containers = {
     containerTotalNum: 3,
     textObject: [
@@ -643,18 +662,21 @@ async function buildPage(): Promise<void> {
   const result = await bridge.createStartUpPageContainer(
     new CreateStartUpPageContainer(containers),
   );
-  if (result === StartUpPageCreateResult.success) {
-    log.info('createStartUpPageContainer success');
-  } else {
-    log.info('createStartUpPageContainer failed, rebuilding', { result: Number(result) });
-    try {
-      await bridge.rebuildPageContainer(
-        new RebuildPageContainer(containers),
-      );
-      log.info('rebuildPageContainer success');
-    } catch (e) {
-      log.error('rebuildPageContainer failed', { error: String(e) });
-    }
+  const decision = decidePageRender(startupRendered, Number(result));
+  startupRendered = true;
+
+  switch (decision) {
+    case 'first-success':
+      log.info('createStartUpPageContainer success');
+      return;
+    case 'first-nonsuccess':
+      log.info('createStartUpPageContainer non-success, assuming already initialized', {
+        result: Number(result),
+      });
+      return;
+    case 'already-initialized':
+      log.warn('buildPage reached SDK call with startupRendered=true (race?)');
+      return;
   }
 }
 
