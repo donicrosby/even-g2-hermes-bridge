@@ -305,7 +305,8 @@ class BridgeServer:
         if adapter is None:
             return None
 
-        fut = adapter.register_byoa_future(_BYOA_CHAT_ID)
+        chat_id = adapter._last_chat_id or _BYOA_CHAT_ID
+        fut = adapter.register_byoa_future(chat_id)
 
         try:
             from byoa_plugin.adapter import MessageEvent, MessageType  # noqa: PLC0415

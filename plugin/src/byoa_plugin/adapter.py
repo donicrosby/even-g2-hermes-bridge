@@ -368,12 +368,16 @@ class EvenG2Adapter(BasePlatformAdapter):
         if delta:
             ok = await self.registry.send_frame(chat_id, proto.assistant_delta(delta))
             if not ok:
-                LOG.warning("send failed chat_id=%s (no active connection)", chat_id)
-                return SendResult(success=False, error="no active connection")
-            LOG.info(
-                "frame direction=out frame_type=assistant.delta byte_size=%d chat_id=%s",
-                len(delta), chat_id,
-            )
+                if chat_id in self._byoa_futures:
+                    LOG.info("send ws_push_skipped chat_id=%s (byoa, no ws)", chat_id)
+                else:
+                    LOG.warning("send failed chat_id=%s (no active connection)", chat_id)
+                    return SendResult(success=False, error="no active connection")
+            else:
+                LOG.info(
+                    "frame direction=out frame_type=assistant.delta byte_size=%d chat_id=%s",
+                    len(delta), chat_id,
+                )
         return SendResult(success=True, message_id="g2")
 
     async def edit_message(
@@ -388,15 +392,16 @@ class EvenG2Adapter(BasePlatformAdapter):
         """Send a streaming delta update for an existing assistant message."""
         state = self.registry.stream_state(chat_id)
         delta = state.delta_for(content)
+        send_ok = True
         if delta:
-            ok = await self.registry.send_frame(chat_id, proto.assistant_delta(delta))
-            if not ok:
-                return SendResult(success=False, error="no active connection")
+            send_ok = await self.registry.send_frame(chat_id, proto.assistant_delta(delta))
         if finalize:
             await self.registry.send_frame(chat_id, proto.turn_done())
             fut = self._byoa_futures.pop(chat_id, None)
             if fut and not fut.done():
                 fut.set_result(content)
+        if not send_ok:
+            return SendResult(success=False, error="no active connection")
         return SendResult(success=True, message_id=message_id)
 
     async def get_chat_info(self, chat_id: str) -> dict[str, Any]:

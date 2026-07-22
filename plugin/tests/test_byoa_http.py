@@ -22,6 +22,7 @@ class _MockAdapter:
 
     def __init__(self) -> None:
         self._futures: dict[str, asyncio.Future[str]] = {}
+        self._last_chat_id = "even-add-agent"
 
     @property
     def platform(self) -> object:
