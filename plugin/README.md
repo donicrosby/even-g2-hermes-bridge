@@ -194,18 +194,15 @@ uv run ruff check src/ tests/        # lint
 uv run basedpyright                  # type check
 ```
 
-### Regenerating the TypeScript protocol module
+### Regenerating the wire-protocol stubs
 
-`glasses-app/src/protocol.ts` is generated from `plugin/src/byoa_plugin/protocol.py`
-so the WS wire format has one source of truth. Regenerate after changing frame
-schemas:
+Both the Python stubs (`plugin/src/byoa_plugin/proto_gen/hermes_bridge_pb2.py`) and the TypeScript stubs (`glasses-app/src/proto_gen/hermes_bridge.ts`) are generated from `plugin/proto/hermes_bridge.proto` via [buf](https://buf.build). Regenerate after changing the `.proto`:
 
 ```bash
-cd plugin/
-uv run python -m byoa_plugin.protocol_gen > ../glasses-app/src/protocol.ts
+task proto
 ```
 
-Commit the regenerated file alongside the Python change.
+CI catches stale stubs via `task proto-check`. Commit the regenerated files alongside the `.proto` change.
 
 ## Known limitations (v1)
 
@@ -232,13 +229,12 @@ plugin/
 │   ├── hooks.py            # pre/post_tool_call → tool.start/end frames
 │   ├── http_endpoints.py   # /health + /qr multiplexed on the WS port
 │   ├── net.py              # resolve_advertised_url (Tailscale → LAN fallback)
-│   ├── protocol.py         # frame schemas + constructors + parse_client
-│   ├── protocol_gen.py     # generates glasses-app/src/protocol.ts
 │   ├── qr_setup.py         # QR PNG + terminal rendering
 │   ├── server.py           # WS server (handshake, dispatch, keepalive)
 │   ├── setup_flow.py       # `hermes even-g2 setup`
 │   ├── cli.py              # `hermes even-g2 qr|url|setup`
+│   ├── wire.py             # frame constructors + parse_frame (Protobuf)
 │   └── asr/                # LiteLLM → parakeet → whisper-tiny fallback chain
-└── tests/                  # pytest; 123 tests across protocol, connections,
+└── tests/                  # pytest; covers wire, connections, integration
                             # http_endpoints, config, stream_state, tool_label
 ```

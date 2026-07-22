@@ -97,14 +97,13 @@ Stateful integration code (`main.ts`) should stay thin. Pure logic belongs in `s
 
 ## Protocol codegen
 
-The WS wire format has **one source of truth**: `plugin/src/byoa_plugin/protocol.py`. The TypeScript definitions are generated:
+The WS wire format has **one source of truth**: `plugin/proto/hermes_bridge.proto`. Python stubs (`plugin/src/byoa_plugin/proto_gen/hermes_bridge_pb2.py`) and TypeScript stubs (`glasses-app/src/proto_gen/hermes_bridge.ts`) are generated via [buf](https://buf.build) from the root `Taskfile.yml`:
 
 ```bash
-cd plugin/
-uv run python -m byoa_plugin.protocol_gen > ../glasses-app/src/protocol.ts
+task proto
 ```
 
-Always regenerate `glasses-app/src/protocol.ts` after changing frame schemas in `protocol.py`. Commit the regenerated file alongside the Python change.
+Always regenerate both stub dirs after changing the `.proto`. CI catches stale stubs via `task proto-check` (regenerates + asserts `git diff --exit-code` on the generated dirs). Commit the regenerated files alongside the `.proto` change.
 
 ## Security
 
