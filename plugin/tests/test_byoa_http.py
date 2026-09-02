@@ -23,6 +23,7 @@ class _MockAdapter:
     def __init__(self) -> None:
         self._futures: dict[str, asyncio.Future[str]] = {}
         self._last_chat_id = "even-add-agent"
+        self.response_text = "This is a mock response from the agent."
 
     @property
     def platform(self) -> object:
@@ -46,7 +47,7 @@ class _MockAdapter:
 
         for _chat_id, fut in list(self._futures.items()):
             if not fut.done():
-                fut.set_result("This is a mock response from the agent.")
+                fut.set_result(self.response_text)
 
 
 def _chat_completion_body(content: str = "Hello!") -> dict:
@@ -224,3 +225,47 @@ class TestHealthEndpoint:
             body = await resp.json()
         assert status == 200
         assert body["byoa_enabled"] is True
+
+
+class TestByoaGzip:
+    """Regression tests for gzip-compressed large responses.
+
+    Large responses (>512 chars) to gzip-capable clients must be valid
+    gzip JSON. Previously every such response crashed with
+    TypeError (dumps= bytes) and surfaced as 'AI server error' on glasses.
+    """
+
+    async def test_gzip_response_roundtrips(self, byoa_server: SimpleNamespace) -> None:
+        import aiohttp
+
+        long_content = "x" * 800
+        byoa_server.mock_adapter.response_text = long_content
+
+        url = f"http://127.0.0.1:{byoa_server.bound_port}/v1/chat/completions"
+        async with aiohttp.ClientSession(auto_decompress=True) as session:
+            async with session.post(
+                url,
+                json=_chat_completion_body("hi"),
+                headers={**_auth_headers("byoa-secret"), "Accept-Encoding": "gzip"},
+            ) as resp:
+                assert resp.status == 200
+                assert resp.headers.get("Content-Encoding") == "gzip"
+                data = await resp.json()
+        assert data["choices"][0]["message"]["content"] == "x" * 800
+
+    async def test_small_response_stays_uncompressed(self, byoa_server: SimpleNamespace) -> None:
+        import aiohttp
+
+        byoa_server.mock_adapter.response_text = "tiny"
+
+        url = f"http://127.0.0.1:{byoa_server.bound_port}/v1/chat/completions"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                json=_chat_completion_body("hi"),
+                headers={**_auth_headers("byoa-secret"), "Accept-Encoding": "gzip"},
+            ) as resp:
+                assert resp.status == 200
+                assert "gzip" not in (resp.headers.get("Content-Encoding") or "")
+                data = await resp.json()
+        assert data["choices"][0]["message"]["content"] == "tiny"

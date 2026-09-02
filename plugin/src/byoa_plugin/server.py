@@ -337,7 +337,12 @@ class BridgeServer:
         body_dict = _chat_completion(content)
         accept = request.headers.get("accept-encoding", "")
         if "gzip" in accept and len(content) > 512:
-            return web.json_response(body_dict, headers={"Content-Encoding": "gzip"}, dumps=lambda d: gzip.compress(json.dumps(d).encode()))
+            payload = gzip.compress(json.dumps(body_dict).encode())
+            return web.Response(
+                body=payload,
+                content_type="application/json",
+                headers={"Content-Encoding": "gzip"},
+            )
         return web.json_response(body_dict)
 
     def _byoa_error(self, status: int, message: str, etype: str = "invalid_request_error") -> web.Response:
