@@ -26,14 +26,42 @@ STREAMING_CURSOR = proto.STREAMING_CURSOR
 
 @dataclass
 class StreamState:
-    """Tracks sent_len so delta_for() returns only the unsent suffix.
+    """Tracks what has been sent so updates carry only what's new.
 
     The Hermes Gateway sends the full accumulated text on every edit_message
     call (it doesn't stream token-by-token to platforms). We diff against
-    what we've already pushed to the client and send only the new chars.
+    what we've already pushed to the client and send only the new chars —
+    unless the new text is not a pure extension of what was sent (e.g.
+    markdown stripping rewrote an earlier span), in which case the caller
+    must resync with a full-text frame instead of a suffix delta.
     """
 
     sent_len: int = 0
+    #: Last text actually pushed to the client (cleaned). Empty string
+    #: means nothing sent yet, so the first update is naturally "full".
+    last_sent: str = ""
+
+    @staticmethod
+    def _clean(accumulated: str) -> str:
+        """Strip the trailing streaming cursor the gateway appends."""
+        return accumulated.removesuffix(STREAMING_CURSOR)
+
+    def next_update(self, accumulated: str) -> tuple[str, str]:
+        """Return (kind, text) for the next frame.
+
+        kind == "delta": text is the unsent suffix; append on the client.
+        kind == "full":  text is the complete text; replace on the client
+                        (prefix diverged or content shrank).
+        """
+        clean = self._clean(accumulated)
+        if self.last_sent and clean.startswith(self.last_sent):
+            delta = clean[len(self.last_sent):]
+            self.sent_len = len(clean)
+            self.last_sent = clean
+            return ("delta", delta)
+        self.sent_len = len(clean)
+        self.last_sent = clean
+        return ("full", clean)
 
     def delta_for(self, accumulated: str) -> str:
         """Return the unsent suffix of `accumulated`.
@@ -42,19 +70,21 @@ class StreamState:
         cursor the gateway appends to in-progress text doesn't leak into
         deltas.
         """
-        clean = accumulated
-        clean = clean.removesuffix(STREAMING_CURSOR)
+        clean = self._clean(accumulated)
         if len(clean) < self.sent_len:
             # Content shrank — treat as fresh. Reset cursor and send full text.
             self.sent_len = len(clean)
+            self.last_sent = clean
             return clean
         delta = clean[self.sent_len:]
         self.sent_len = len(clean)
+        self.last_sent = clean
         return delta
 
     def reset(self) -> None:
         """Reset the streaming cursor so the next delta starts fresh."""
         self.sent_len = 0
+        self.last_sent = ""
 
 
 class ConnectionRegistry:

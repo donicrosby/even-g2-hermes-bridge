@@ -22,6 +22,7 @@ import anyio
 
 from byoa_plugin import wire as proto
 from byoa_plugin.connections import ConnectionRegistry
+from byoa_plugin.plaintext import strip_markdown
 from byoa_plugin.server import BridgeServer
 
 if TYPE_CHECKING:
@@ -355,9 +356,11 @@ class EvenG2Adapter(BasePlatformAdapter):
         LOG.info("send chat_id=%s content_len=%d", chat_id, len(content or ""))
         state = self.registry.stream_state(chat_id)
         state.reset()
-        delta = state.delta_for(content)
-        if delta:
-            ok = await self.registry.send_frame(chat_id, proto.assistant_delta(delta))
+        content = strip_markdown(content or "")
+        kind, text = state.next_update(content)
+        if text:
+            frame = proto.assistant_full(text) if kind == "full" else proto.assistant_delta(text)
+            ok = await self.registry.send_frame(chat_id, frame)
             if not ok:
                 fut = self._byoa_futures.pop(chat_id, None)
                 if fut is not None:
@@ -373,8 +376,8 @@ class EvenG2Adapter(BasePlatformAdapter):
                     return SendResult(success=False, error="no active connection")
             else:
                 LOG.info(
-                    "frame direction=out frame_type=assistant.delta byte_size=%d chat_id=%s",
-                    len(delta), chat_id,
+                    "frame direction=out frame_type=%s byte_size=%d chat_id=%s",
+                    "assistant.full" if kind == "full" else "assistant.delta", len(text), chat_id,
                 )
         else:
             fut = self._byoa_futures.pop(chat_id, None)
@@ -394,10 +397,12 @@ class EvenG2Adapter(BasePlatformAdapter):
     ) -> SendResult:
         """Send a streaming delta update for an existing assistant message."""
         state = self.registry.stream_state(chat_id)
-        delta = state.delta_for(content)
+        content = strip_markdown(content or "")
+        kind, text = state.next_update(content)
         send_ok = True
-        if delta:
-            send_ok = await self.registry.send_frame(chat_id, proto.assistant_delta(delta))
+        if text:
+            frame = proto.assistant_full(text) if kind == "full" else proto.assistant_delta(text)
+            send_ok = await self.registry.send_frame(chat_id, frame)
         if finalize:
             await self.registry.send_frame(chat_id, proto.turn_done())
             fut = self._byoa_futures.pop(chat_id, None)

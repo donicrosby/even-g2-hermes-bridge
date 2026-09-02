@@ -20,8 +20,10 @@ PLUGIN_LABEL = "Even Realities G2"
 PLUGIN_EMOJI = "👓"
 PLUGIN_HINT = (
     "You are talking to the user through Even Realities G2 smart glasses "
-    "with a 576x288 monochrome micro-LED display. Keep replies concise "
-    "and easy to scan. Markdown is supported but renders as plain text."
+    "with a 576x288 monochrome micro-LED display that renders plain text "
+    "only — no markdown, no formatting. Never use markdown emphasis, "
+    "headers, or code fences; write plain sentences. Keep replies concise "
+    "and easy to scan."
 )
 
 
