@@ -325,7 +325,8 @@ function handleHelloOk(frame: HelloOkFrame): void {
 }
 
 function handleAssistantDelta(frame: AssistantDeltaFrame): void {
-  accumulatedAssistantText = frame.text || '';
+  if (!frame.text) return;
+  accumulatedAssistantText += frame.text;
   renderAssistant();
   void maybeBringToFront();
 }
