@@ -359,8 +359,15 @@ class EvenG2Adapter(BasePlatformAdapter):
         if delta:
             ok = await self.registry.send_frame(chat_id, proto.assistant_delta(delta))
             if not ok:
-                if chat_id in self._byoa_futures:
+                fut = self._byoa_futures.pop(chat_id, None)
+                if fut is not None:
+                    # BYOA terminal delivery: no WS consumer, so this send()
+                    # IS the final turn content. edit_message(finalize=True)
+                    # never fires on the non-streaming path — resolve here or
+                    # the HTTPS handler blocks until its 120s timeout.
                     LOG.info("send ws_push_skipped chat_id=%s (byoa, no ws)", chat_id)
+                    if not fut.done():
+                        fut.set_result(content)
                 else:
                     LOG.warning("send failed chat_id=%s (no active connection)", chat_id)
                     return SendResult(success=False, error="no active connection")
@@ -369,6 +376,11 @@ class EvenG2Adapter(BasePlatformAdapter):
                     "frame direction=out frame_type=assistant.delta byte_size=%d chat_id=%s",
                     len(delta), chat_id,
                 )
+        else:
+            fut = self._byoa_futures.pop(chat_id, None)
+            if fut is not None and not fut.done():
+                # Empty terminal send (e.g. suppressed content) — still terminal.
+                fut.set_result(content or "")
         return SendResult(success=True, message_id="g2")
 
     async def edit_message(
