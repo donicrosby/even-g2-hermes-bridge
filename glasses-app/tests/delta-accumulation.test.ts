@@ -1,5 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { parseFrame, assistantDelta, assistantFull, turnDone } from '../src/wire';
+import {
+  parseOutbound,
+  type AssistantDeltaFrame,
+  type AssistantFullFrame,
+  type TurnDoneFrame,
+} from '../src/protocol';
+
+/** Round-trip a JSON frame through parseOutbound (the inbound path). */
+const parse = (raw: unknown): ReturnType<typeof parseOutbound> =>
+  parseOutbound(JSON.stringify(raw));
+
+const delta = (text: string): AssistantDeltaFrame =>
+  parse({ t: 'assistant.delta', text }) as AssistantDeltaFrame;
+
+const full = (text: string): AssistantFullFrame =>
+  parse({ t: 'assistant', text }) as AssistantFullFrame;
+
+const turnDone = (): TurnDoneFrame =>
+  parse({ t: 'turn.done' }) as TurnDoneFrame;
 
 /**
  * Delta accumulation semantics (openspec strip-markdown-plain-text-output):
@@ -16,41 +34,41 @@ import { parseFrame, assistantDelta, assistantFull, turnDone } from '../src/wire
  */
 describe('assistant text accumulation contract', () => {
   it('sequential deltas append', () => {
-    const d1 = parseFrame(assistantDelta('Hello '));
-    const d2 = parseFrame(assistantDelta('world'));
-    expect(d1.assistantDelta?.text).toBe('Hello ');
-    expect(d2.assistantDelta?.text).toBe('world');
+    const d1 = delta('Hello ');
+    const d2 = delta('world');
+    expect(d1.text).toBe('Hello ');
+    expect(d2.text).toBe('world');
     // client-side append:
     let acc = '';
     for (const f of [d1, d2]) {
-      if (f.assistantDelta?.text) acc += f.assistantDelta.text;
+      if (f.text) acc += f.text;
     }
     expect(acc).toBe('Hello world');
   });
 
   it('full frame replaces (resync)', () => {
-    const delta = parseFrame(assistantDelta('old prefix'));
-    const full = parseFrame(assistantFull('corrected full text'));
+    const d = delta('old prefix');
+    const f = full('corrected full text');
     let acc = '';
-    if (delta.assistantDelta?.text) acc += delta.assistantDelta.text;
-    if (full.assistant?.text) acc = full.assistant.text;
+    if (d.text) acc += d.text;
+    acc = f.text;
     expect(acc).toBe('corrected full text');
   });
 
   it('empty delta text is a no-op', () => {
-    const f = parseFrame(assistantDelta(''));
-    expect(f.assistantDelta?.text ?? '').toBe('');
+    const f = delta('');
+    expect(f.text ?? '').toBe('');
   });
 
   it('turn.done separates turns (fresh accumulation)', () => {
-    const d = parseFrame(assistantDelta('turn one text'));
-    const t = parseFrame(turnDone());
-    const d2 = parseFrame(assistantDelta('turn two'));
-    expect(t.turnDone).toBeDefined();
+    const d = delta('turn one text');
+    const t = turnDone();
+    const d2 = delta('turn two');
+    expect(t.t).toBe('turn.done');
     let acc = '';
-    if (d.assistantDelta?.text) acc += d.assistantDelta.text;
+    if (d.text) acc += d.text;
     acc = ''; // handleTurnDone clears
-    if (d2.assistantDelta?.text) acc += d2.assistantDelta.text;
+    if (d2.text) acc += d2.text;
     expect(acc).toBe('turn two');
   });
 });

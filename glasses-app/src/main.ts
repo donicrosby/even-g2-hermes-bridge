@@ -10,15 +10,13 @@ import {
 } from '@evenrealities/even_hub_sdk';
 
 import {
-  hello as wireHello,
-  text as wireText,
-  audioStart as wireAudioStart,
-  audioStop as wireAudioStop,
-  audioData as wireAudioData,
-  sessionsList as wireSessionsList,
-  sessionsSwitch as wireSessionsSwitch,
-  parseFrame,
-  type Frame,
+  sendHello,
+  sendText,
+  sendAudioStart,
+  sendAudioStop,
+  sendSessionsList,
+  sendSessionsSwitch,
+  parseOutbound,
   type HelloOkFrame,
   type AssistantDeltaFrame,
   type AssistantFullFrame,
@@ -28,7 +26,7 @@ import {
   type ActiveFrame,
   type TranscriptFrame,
   type ErrorFrame,
-} from './wire';
+} from './protocol';
 import { truncateSessionName } from './lib/session';
 import { nextBackoffDelay } from './lib/reconnect';
 import { sanitizeContent, decidePageRender } from './lib/page-lifecycle';
@@ -228,35 +226,23 @@ async function connect(): Promise<void> {
   socket.onopen = () => {
     reconnectAttempts = 0;
     log.info('ws_open', { url });
-    const helloBytes = wireHello(token, serial);
-    socket.send(helloBytes.buffer.slice(helloBytes.byteOffset, helloBytes.byteOffset + helloBytes.byteLength));
-    log.info('frame', { direction: 'out', frame_type: 'hello', byte_size: helloBytes.byteLength });
+    sendHello(socket, token, serial);
+    log.info('frame', { direction: 'out', frame_type: 'hello' });
   };
 
   socket.onmessage = (ev) => {
-    if (!(ev.data instanceof ArrayBuffer)) return;
+    if (typeof ev.data !== 'string') return;
     try {
-      const frame = parseFrame(new Uint8Array(ev.data));
-      const kind = frame.helloOk ? 'hello.ok'
-        : frame.assistantDelta ? 'assistant.delta'
-        : frame.assistant ? 'assistant'
-        : frame.toolStart ? 'tool.start'
-        : frame.toolEnd ? 'tool.end'
-        : frame.turnDone ? 'turn.done'
-        : frame.sessions ? 'sessions'
-        : frame.active ? 'active'
-        : frame.transcript ? 'transcript'
-        : frame.error ? 'error'
-        : 'unknown';
+      const frame = parseOutbound(ev.data);
       log.info('frame', {
         direction: 'in',
-        frame_type: kind,
-        byte_size: ev.data.byteLength,
+        frame_type: frame.t,
+        byte_size: ev.data.length,
       });
-      handleFrame(frame);
+      handleFrame(frame as unknown as Record<string, unknown>);
     } catch (e) {
       log.warn('frame_decode_error', {
-        byte_size: ev.data.byteLength,
+        byte_size: ev.data.length,
         error: e instanceof Error ? e.message : String(e),
       });
     }
@@ -288,30 +274,30 @@ function scheduleReconnect(): void {
   setTimeout(() => void connect(), delay);
 }
 
-function sendFrame(bytes: Uint8Array, frameType: string): void {
+function sendFrame(sendFn: (socket: WebSocket) => void, frameType: string): void {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    sendFn(ws);
     log.info('frame', {
       direction: 'out',
       frame_type: frameType,
-      byte_size: bytes.byteLength,
     });
   }
 }
 
 // ===== Inbound frame handling ==============================================
 
-function handleFrame(frame: Frame): void {
-  if (frame.helloOk) handleHelloOk(frame.helloOk);
-  else if (frame.assistantDelta) handleAssistantDelta(frame.assistantDelta);
-  else if (frame.assistant) handleAssistantFull(frame.assistant);
-  else if (frame.toolStart) handleToolStart(frame.toolStart);
-  else if (frame.toolEnd) handleToolEnd(frame.toolEnd);
-  else if (frame.turnDone) handleTurnDone();
-  else if (frame.sessions) handleSessions(frame.sessions);
-  else if (frame.active) handleActive(frame.active);
-  else if (frame.transcript) handleTranscript(frame.transcript);
-  else if (frame.error) handleError(frame.error);
+function handleFrame(frame: Record<string, unknown>): void {
+  const t = frame.t;
+  if (t === 'hello.ok') handleHelloOk(frame as unknown as HelloOkFrame);
+  else if (t === 'assistant.delta') handleAssistantDelta(frame as unknown as AssistantDeltaFrame);
+  else if (t === 'assistant') handleAssistantFull(frame as unknown as AssistantFullFrame);
+  else if (t === 'tool.start') handleToolStart(frame as unknown as ToolStartFrame);
+  else if (t === 'tool.end') handleToolEnd(frame as unknown as ToolEndFrame);
+  else if (t === 'turn.done') handleTurnDone();
+  else if (t === 'sessions') handleSessions(frame as unknown as SessionsFrame);
+  else if (t === 'active') handleActive(frame as unknown as ActiveFrame);
+  else if (t === 'transcript') handleTranscript(frame as unknown as TranscriptFrame);
+  else if (t === 'error') handleError(frame as unknown as ErrorFrame);
 }
 
 function handleHelloOk(frame: HelloOkFrame): void {
@@ -321,7 +307,7 @@ function handleHelloOk(frame: HelloOkFrame): void {
     renderSession();
     scheduleSave();
   }
-  sendFrame(wireSessionsList(), 'sessions.list');
+  sendFrame((socket) => sendSessionsList(socket), 'sessions.list');
 }
 
 function handleAssistantDelta(frame: AssistantDeltaFrame): void {
@@ -351,7 +337,7 @@ function handleTranscript(frame: TranscriptFrame): void {
   scheduleSave();
 
   if (voiceConfirmMode === 'fast') {
-    sendFrame(wireText(lastTranscript), 'text');
+    sendFrame((socket) => sendText(socket, lastTranscript), 'text');
     return;
   }
 
@@ -381,7 +367,7 @@ function confirmTranscript(): void {
   if (pendingTranscript === null) return;
   const text = pendingTranscript;
   clearTranscriptOverlay();
-  sendFrame(wireText(text), 'text');
+  sendFrame((socket) => sendText(socket, text), 'text');
 }
 
 function retryTranscript(): void {
@@ -454,23 +440,24 @@ async function toggleMic(): Promise<void> {
       setStatus('Mic failed');
       return;
     }
-    sendFrame(wireAudioStart(), 'audio.start');
+    sendFrame((socket) => sendAudioStart(socket), 'audio.start');
   } else {
     setStatus('Processing...');
     await runBridge('audioControl', () => bridge!.audioControl(false));
-    sendFrame(wireAudioStop(), 'audio.stop');
+    sendFrame((socket) => sendAudioStop(socket), 'audio.stop');
   }
 }
 
 function switchSession(delta: 1 | -1): void {
-  sendFrame(wireSessionsSwitch(delta > 0 ? '+1' : '-1'), 'sessions.switch');
+  sendFrame((socket) => sendSessionsSwitch(socket, delta > 0 ? '+1' : '-1'), 'sessions.switch');
 }
 
 // ===== Audio streaming =====================================================
 
 function handleAudioPcm(pcm: Uint8Array): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  sendFrame(wireAudioData(pcm), 'audio_data');
+  ws.send(pcm.slice().buffer);
+  log.info('frame', { direction: 'out', frame_type: 'pcm', byte_size: pcm.byteLength });
 }
 
 // ===== Config screen (phone-side, Even design system) ====================

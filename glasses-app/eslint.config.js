@@ -4,7 +4,7 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/protocol.ts', 'eslint.config.js', 'vite.config.ts', 'vitest.config.ts'],
+    ignores: ['dist/**', 'node_modules/**', 'eslint.config.js', 'vite.config.ts', 'vitest.config.ts'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
