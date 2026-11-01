@@ -90,20 +90,22 @@ import { OsEventTypeList } from '@evenrealities/even_hub_sdk';
 
 Stateful integration code (`main.ts`) should stay thin. Pure logic belongs in `src/lib/` modules with corresponding `tests/` files:
 
-- `src/lib/frames.ts` — frame reducer (pure state + effects)
 - `src/lib/session.ts` — session name truncation
 - `src/lib/reconnect.ts` — exponential backoff calculation
 - `src/lib/state.ts` — snapshot serialize/parse/merge
 
-## Protocol codegen
+## Wire protocol
 
-The WS wire format has **one source of truth**: `plugin/proto/hermes_bridge.proto`. Python stubs (`plugin/src/byoa_plugin/proto_gen/hermes_bridge_pb2.py`) and TypeScript stubs (`glasses-app/src/proto_gen/hermes_bridge.ts`) are generated via [buf](https://buf.build) from the root `Taskfile.yml`:
+The plugin ↔ glasses-app WebSocket speaks **plain JSON text frames** — no codegen, no `.proto`, no Protobuf runtime. Every frame is a JSON object with a `t` discriminator. Binary PCM audio (16-bit LE, 16 kHz, mono) travels as **raw BINARY WS frames** between `audio.start` and `audio.stop` — never wrapped.
 
-```bash
-task proto
-```
+Two hand-synced sources of truth (kept in lockstep by their test suites, not a build step):
 
-Always regenerate both stub dirs after changing the `.proto`. CI catches stale stubs via `task proto-check` (regenerates + asserts `git diff --exit-code` on the generated dirs). Commit the regenerated files alongside the `.proto` change.
+- `plugin/src/byoa_plugin/protocol.py` — Python constructors + `parse_client`
+- `glasses-app/src/protocol.ts` — TypeScript discriminated union + `send*` helpers
+
+Both sides derive from stdlib JSON (`json` / `JSON.parse`) only, so the wire has **zero external dependencies**. When adding or changing a frame family, update both modules and their tests (`plugin/tests/test_protocol.py`, `glasses-app/tests/`).
+
+Frame families: inbound `hello`, `text`, `audio.start`, `audio.stop`, `sessions.list`, `sessions.switch`, `sessions.new`, `stop`; outbound `hello.ok`, `assistant.delta`, `assistant`, `tool.start`, `tool.end`, `turn.done`, `sessions`, `active`, `history`, `transcript`, `error`.
 
 ## Security
 

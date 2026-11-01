@@ -51,7 +51,7 @@ plugin transcribes (LiteLLM → parakeet → faster-whisper fallback) → emits
 > # Install all runtime deps from the plugin's pyproject.toml:
 > $GW_PY -m pip install -e /opt/data/plugins/even-g2/
 > # Or install individual deps:
-> $GW_PY -m pip install 'protobuf>=7.35.1'
+> $GW_PY -m pip install 'aiohttp>=3.10'
 > ```
 >
 > Re-run whenever `[project.dependencies]` in `plugin/pyproject.toml` changes.
@@ -189,20 +189,10 @@ development with the glasses-app on the same network.
 ```bash
 cd plugin/
 uv sync                              # installs deps + dev tools
-uv run pytest                        # 123 tests across 6 files
+uv run pytest                        # 206 tests across 13 files
 uv run ruff check src/ tests/        # lint
 uv run basedpyright                  # type check
 ```
-
-### Regenerating the wire-protocol stubs
-
-Both the Python stubs (`plugin/src/byoa_plugin/proto_gen/hermes_bridge_pb2.py`) and the TypeScript stubs (`glasses-app/src/proto_gen/hermes_bridge.ts`) are generated from `plugin/proto/hermes_bridge.proto` via [buf](https://buf.build). Regenerate after changing the `.proto`:
-
-```bash
-task proto
-```
-
-CI catches stale stubs via `task proto-check`. Commit the regenerated files alongside the `.proto` change.
 
 ## BYOA Setup (Even's Add Agent)
 
@@ -264,7 +254,6 @@ plugin/
 │   ├── server.py           # WS server (handshake, dispatch, keepalive)
 │   ├── setup_flow.py       # `hermes even-g2 setup`
 │   ├── cli.py              # `hermes even-g2 qr|url|setup`
-│   ├── wire.py             # frame constructors + parse_frame (Protobuf)
 │   └── asr/                # LiteLLM → parakeet → whisper-tiny fallback chain
 └── tests/                  # pytest; covers wire, connections, integration
                             # http_endpoints, config, stream_state, tool_label
