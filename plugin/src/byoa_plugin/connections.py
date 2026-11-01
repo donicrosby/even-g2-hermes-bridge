@@ -17,7 +17,7 @@ from typing import Any
 
 import anyio
 
-from byoa_plugin import wire as proto
+from byoa_plugin import protocol as proto
 
 LOG = logging.getLogger("byoa_plugin.connections")
 
@@ -165,7 +165,7 @@ class ConnectionRegistry:
         # doesn't crash the caller. The computed delta is discarded.
         return StreamState()
 
-    async def send_frame(self, chat_id: str, frame: bytes) -> bool:
+    async def send_frame(self, chat_id: str, frame: str) -> bool:
         """Send a text frame to the chat_id's socket. Returns True on success.
 
         On send failure, unregisters the chat_id (the socket is broken).
@@ -176,7 +176,7 @@ class ConnectionRegistry:
             return False
         ws, _ = entry
         try:
-            await ws.send_bytes(frame)
+            await ws.send_str(frame)
         except (RuntimeError, OSError, ConnectionResetError) as e:
             LOG.warning(
                 "send_frame failed for chat_id=%s: %s — unregistering",

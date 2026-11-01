@@ -20,15 +20,13 @@ import logging
 import signal
 import sys
 from collections import Counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import anyio
-from google.protobuf.json_format import MessageToDict
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
-from byoa_plugin import wire
-from byoa_plugin.proto_gen import hermes_bridge_pb2 as _pb
+from byoa_plugin import protocol
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -38,14 +36,14 @@ if TYPE_CHECKING:
 LOG = logging.getLogger("debug_client")
 
 
-def parse_send_spec(spec: str) -> tuple[bytes, str]:
-    """Parse a --send spec of the form ``<frame_type>:<arg>`` into serialized bytes.
+def parse_send_spec(spec: str) -> tuple[str, str]:
+    """Parse a --send spec of the form ``<frame_type>:<arg>`` into a JSON string.
 
-    Recognized frame types match the inbound wire.* constructors:
+    Recognized frame types match the inbound protocol.* constructors:
     ``text``, ``sessions.list``, ``sessions.switch:<target>``,
     ``sessions.new``, ``audio.start``, ``audio.stop``, ``stop``.
 
-    Returns a tuple of (serialized_bytes, frame_type_label).
+    Returns a tuple of (json_string, frame_type_label).
     Raises ValueError on unknown frame types or missing required args.
     """
     head, _, rest = spec.partition(":")
@@ -55,21 +53,21 @@ def parse_send_spec(spec: str) -> tuple[bytes, str]:
     if head == "text":
         if not rest:
             raise ValueError("text: requires a content argument")
-        return wire.text(rest), "text"
+        return protocol.text(rest), "text"
     if head in {"sessions.list", "sessions_list"}:
-        return wire.sessions_list(), "sessions.list"
+        return protocol.sessions_list(), "sessions.list"
     if head in {"sessions.switch", "sessions_switch"}:
         if not rest:
             raise ValueError("sessions.switch: requires a target argument")
-        return wire.sessions_switch(rest), "sessions.switch"
+        return protocol.sessions_switch(rest), "sessions.switch"
     if head in {"sessions.new", "sessions_new"}:
-        return wire.sessions_new(), "sessions.new"
+        return protocol.sessions_new(), "sessions.new"
     if head in {"audio.start", "audio_start"}:
-        return wire.audio_start(), "audio.start"
+        return protocol.audio_start(), "audio.start"
     if head in {"audio.stop", "audio_stop"}:
-        return wire.audio_stop(), "audio.stop"
+        return protocol.audio_stop(), "audio.stop"
     if head == "stop":
-        return wire.stop(), "stop"
+        return protocol.stop(), "stop"
     raise ValueError(f"unknown frame type in --send spec: {head!r}")
 
 
@@ -111,20 +109,17 @@ async def _receive_loop(
                     raw = await ws.recv()
                 except ConnectionClosed:
                     break
-                if not isinstance(raw, (bytes, bytearray)):
-                    LOG.warning("non_binary_message",
+                if isinstance(raw, (bytes, bytearray)):
+                    LOG.warning("non_text_message",
                                 extra={"type": type(raw).__name__})
                     continue
                 try:
-                    frame = wire.parse_frame(bytes(raw))
-                except wire.FrameParseError as e:
+                    frame = protocol.parse_client(raw)
+                except protocol.ProtocolParseError as e:
                     LOG.warning("frame_decode_error",
                                 extra={"error": str(e), "byte_size": len(raw)})
                     continue
-                kind = frame.WhichOneof("payload")
-                if kind is None:
-                    LOG.warning("empty_frame", extra={"byte_size": len(raw)})
-                    continue
+                kind = str(frame.get("t", "unknown"))
                 received[kind] += 1
                 LOG.info("frame", extra=_frame_fields(frame, debug))
     finally:
@@ -149,34 +144,34 @@ async def run_client(
     try:
         async with connect(url, max_size=2**20) as ws:
             LOG.info("ws_open", extra={"url": url})
-            hello_bytes = wire.hello(token, "debug-client")
-            await ws.send(hello_bytes)
+            hello_str = protocol.hello(token, "debug-client")
+            await ws.send(hello_str)
             sent["hello"] += 1
             LOG.info("frame", extra={"direction": "out", "frame_type": "hello",
-                                     "byte_size": len(hello_bytes)})
+                                     "byte_size": len(hello_str)})
 
             with anyio.fail_after(timeout):
                 raw_first = await ws.recv()
-            if not isinstance(raw_first, (bytes, bytearray)):
-                LOG.error("handshake_non_binary",
+            if isinstance(raw_first, (bytes, bytearray)):
+                LOG.error("handshake_non_text",
                           extra={"type": type(raw_first).__name__})
                 return 1
-            first_frame = wire.parse_frame(bytes(raw_first))
-            first_kind = first_frame.WhichOneof("payload")
-            if first_kind != "hello_ok":
+            first_frame = protocol.parse_client(raw_first)
+            first_kind = first_frame.get("t")
+            if first_kind != "hello.ok":
                 LOG.error("handshake_failed",
-                          extra={"expected": "hello_ok", "got": first_kind})
+                          extra={"expected": "hello.ok", "got": first_kind})
                 return 1
             received["hello.ok"] += 1
             LOG.info("hello_ok_received", extra=_frame_fields(first_frame, debug))
 
             for spec in send_specs:
-                bytes_to_send, label = parse_send_spec(spec)
-                await ws.send(bytes_to_send)
+                json_to_send, label = parse_send_spec(spec)
+                await ws.send(json_to_send)
                 sent[label] += 1
                 LOG.info("frame",
                          extra={"direction": "out", "frame_type": label,
-                                "byte_size": len(bytes_to_send)})
+                                "byte_size": len(json_to_send)})
 
             await _receive_loop(ws, timeout, debug, received)
 
@@ -193,15 +188,14 @@ async def run_client(
     return 0
 
 
-def _frame_fields(frame: _pb.Frame, debug: bool) -> dict[str, object]:
-    """Extract loggable fields from a Frame. Full payload at DEBUG level."""
-    kind = frame.WhichOneof("payload")
+def _frame_fields(frame: dict[str, Any], debug: bool) -> dict[str, object]:
+    """Extract loggable fields from a JSON frame. Full payload at DEBUG level."""
     fields: dict[str, object] = {
         "direction": "in",
-        "frame_type": kind,
+        "frame_type": frame.get("t", "unknown"),
     }
-    if debug and kind is not None:
-        fields["payload"] = MessageToDict(getattr(frame, kind))
+    if debug:
+        fields["payload"] = frame
     return fields
 
 

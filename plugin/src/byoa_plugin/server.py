@@ -2,7 +2,7 @@
 
 Uses aiohttp for both surfaces on a single port (default 8767):
 
-  WS   /                     → glasses-app Protobuf protocol (existing)
+  WS   /                     → glasses-app JSON protocol (text frames)
   GET  /health               → JSON status
   GET  /qr                   → PNG QR code for glasses-app bootstrap
   POST /v1/chat/completions  → BYOA endpoint for Even's Add Agent (OpenAI shape)
@@ -24,9 +24,9 @@ from typing import TYPE_CHECKING, Any
 
 from aiohttp import WSMsgType, web
 
-from byoa_plugin import wire
+from byoa_plugin import protocol
 from byoa_plugin.log import get_logger
-from byoa_plugin.wire import FrameParseError
+from byoa_plugin.protocol import ProtocolParseError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -138,27 +138,26 @@ class BridgeServer:
                 LOG.info("normal_close", chat_id=None, reason="client_gone_before_hello")
                 return ws
 
-            if msg.type != WSMsgType.BINARY:
-                LOG.warning("auth_failed", chat_id=None, reason="non_binary_first_frame")
-                await ws.close(code=1002, message=b"expected binary frame")
+            if msg.type != WSMsgType.TEXT:
+                LOG.warning("auth_failed", chat_id=None, reason="non_text_first_frame")
+                await ws.close(code=1002, message=b"expected text frame")
                 return ws
 
             first = msg.data
             try:
-                hello_frame = wire.parse_frame(first)
-            except FrameParseError as e:
+                hello = protocol.parse_client(first)
+            except ProtocolParseError as e:
                 LOG.warning("auth_failed", chat_id=None, reason="malformed_hello", detail=str(e))
                 await ws.close(code=1002, message=b"malformed hello")
                 return ws
 
-            kind = hello_frame.WhichOneof("payload")
-            if kind != "hello":
-                LOG.warning("auth_failed", chat_id=None, reason="wrong_first_frame", detail=f"kind={kind!r}")
+            if hello.get("t") != "hello":
+                LOG.warning("auth_failed", chat_id=None, reason="wrong_first_frame", detail=f"t={hello.get('t')!r}")
                 await ws.close(code=1002, message=b"expected hello first")
                 return ws
 
-            client_token = hello_frame.hello.token
-            chat_id_candidate = hello_frame.hello.device or "g2"
+            client_token = hello.get("token", "")
+            chat_id_candidate = str(hello.get("device") or "g2")
             LOG.info("hello_received", chat_id=chat_id_candidate, has_token=bool(client_token))
 
             if not isinstance(client_token, str) or not hmac.compare_digest(client_token, self.cfg.token):
@@ -173,7 +172,7 @@ class BridgeServer:
 
             active = self._active_session_lookup(chat_id) if self._active_session_lookup else None
             caps = ["text", "voice", "tool-events", "sessions", "streaming"]
-            await self._send_frame(ws, wire.hello_ok(active=active, caps=caps), "hello.ok", chat_id)
+            await self._send_frame(ws, protocol.hello_ok(active=active, caps=caps), "hello.ok", chat_id)
 
             LOG.info("dispatch_loop_enter", chat_id=chat_id)
             audio_buf = bytearray()
@@ -183,52 +182,54 @@ class BridgeServer:
                 if msg.type == WSMsgType.ERROR:
                     LOG.warning("ws_error", chat_id=chat_id, error=str(ws.exception()))
                     break
-                if msg.type != WSMsgType.BINARY:
+
+                if msg.type == WSMsgType.BINARY:
+                    raw = msg.data
+                    if capturing:
+                        if len(audio_buf) + len(raw) > MAX_PCM_BYTES:
+                            LOG.warning("pcm_cap_hit", chat_id=chat_id, cap=MAX_PCM_BYTES)
+                            audio_buf.extend(raw[: MAX_PCM_BYTES - len(audio_buf)])
+                            capturing = False
+                        else:
+                            audio_buf.extend(raw)
+                    else:
+                        LOG.debug("binary_outside_capture", chat_id=chat_id, byte_size=len(raw))
+                    continue
+
+                if msg.type != WSMsgType.TEXT:
                     continue
 
                 raw = msg.data
                 try:
-                    frame = wire.parse_frame(raw)
-                except FrameParseError as e:
+                    frame = protocol.parse_client(raw)
+                except ProtocolParseError as e:
                     LOG.warning("frame_decode_error", chat_id=chat_id, byte_size=len(raw), error=str(e))
                     continue
 
-                fkind = frame.WhichOneof("payload")
-                LOG.info("frame", direction="in", frame_type=fkind or "unknown", byte_size=len(raw), chat_id=chat_id)
+                ftype = frame.get("t", "unknown")
+                LOG.info("frame", direction="in", frame_type=ftype, byte_size=len(raw), chat_id=chat_id)
 
-                match fkind:
+                match ftype:
                     case "text" if self._on_text:
-                        self._on_text(chat_id, frame.text.content)
-                    case "audio_start":
+                        self._on_text(chat_id, str(frame.get("text", "")))
+                    case "audio.start":
                         audio_buf.clear()
                         capturing = True
-                    case "audio_data" if capturing:
-                        pcm = frame.audio_data.pcm
-                        if len(audio_buf) + len(pcm) > MAX_PCM_BYTES:
-                            LOG.warning("pcm_cap_hit", chat_id=chat_id, cap=MAX_PCM_BYTES)
-                            audio_buf.extend(pcm[: MAX_PCM_BYTES - len(audio_buf)])
-                            capturing = False
-                        else:
-                            audio_buf.extend(pcm)
-                    case "audio_data":
-                        LOG.debug("audio_data_outside_capture", chat_id=chat_id)
-                    case "audio_stop":
+                    case "audio.stop":
                         capturing = False
                         pcm = bytes(audio_buf)
                         audio_buf.clear()
                         if self._on_audio_stop:
                             self._on_audio_stop(chat_id, pcm)
-                    case "sessions_list" if self._on_sessions_list:
+                    case "sessions.list" if self._on_sessions_list:
                         self._on_sessions_list(chat_id)
-                    case "sessions_switch" if self._on_sessions_switch:
-                        target = frame.sessions_switch.target or "+1"
+                    case "sessions.switch" if self._on_sessions_switch:
+                        target = str(frame.get("id", "+1"))
                         self._on_sessions_switch(chat_id, target)
-                    case "sessions_new" if self._on_sessions_new:
+                    case "sessions.new" if self._on_sessions_new:
                         self._on_sessions_new(chat_id)
                     case "stop" if self._on_stop:
                         self._on_stop(chat_id)
-                    case None:
-                        LOG.warning("empty_frame", chat_id=chat_id)
                     case unknown:
                         LOG.warning("unknown_frame_type", chat_id=chat_id, frame_type=unknown)
 
@@ -243,9 +244,9 @@ class BridgeServer:
         return ws
 
     async def _send_frame(
-        self, ws: web.WebSocketResponse, data: bytes, frame_type: str, chat_id: str,
+        self, ws: web.WebSocketResponse, data: str, frame_type: str, chat_id: str,
     ) -> None:
-        await ws.send_bytes(data)
+        await ws.send_str(data)
         LOG.info("frame", direction="out", frame_type=frame_type, byte_size=len(data), chat_id=chat_id)
 
     # ---- HTTP handlers ------------------------------------------------------

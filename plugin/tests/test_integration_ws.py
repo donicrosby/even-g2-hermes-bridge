@@ -39,8 +39,8 @@ class TestAuthHandshake:
             await client.send_hello()
             frame = await client.recv_one(timeout=2.0)
         assert frame is not None
-        assert frame.WhichOneof("payload") == "hello_ok"
-        assert "streaming" in list(frame.hello_ok.caps)
+        assert frame["t"] == "hello.ok"
+        assert "streaming" in list(frame["caps"])
 
 
 class TestTextFrameRouting:

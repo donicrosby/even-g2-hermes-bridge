@@ -70,8 +70,8 @@ class TestHelloOkActiveField:
             await client.send_hello()
             frame = await client.recv_one(timeout=2.0)
         assert frame is not None
-        assert frame.WhichOneof("payload") == "hello_ok"
-        assert frame.hello_ok.active == "s-known"
+        assert frame["t"] == "hello.ok"
+        assert frame["active"] == "s-known"
 
     async def test_active_omitted_when_lookup_returns_none(
         self,
@@ -85,5 +85,5 @@ class TestHelloOkActiveField:
             await client.send_hello()
             frame = await client.recv_one(timeout=2.0)
         assert frame is not None
-        assert frame.WhichOneof("payload") == "hello_ok"
-        assert not frame.hello_ok.active
+        assert frame["t"] == "hello.ok"
+        assert "active" not in frame

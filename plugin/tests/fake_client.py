@@ -1,8 +1,8 @@
 """Fake glasses-app WebSocket client for plugin integration tests.
 
-Minimal async client speaking the even-g2 Protobuf wire protocol:
+Minimal async client speaking the even-g2 JSON wire protocol:
   - connect + send hello with a token
-  - send text / audio.start / audio.stop / audio_data / arbitrary frames
+  - send text / audio.start / audio.stop / raw binary PCM / arbitrary frames
   - capture server-pushed responses for assertions
   - observe close codes for auth-failure / protocol-violation tests
 """
@@ -16,12 +16,10 @@ import anyio
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
-from byoa_plugin import wire
+from byoa_plugin import protocol
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-
-    from byoa_plugin.proto_gen import hermes_bridge_pb2 as _pb
 
 
 class FakeGlassesClient:
@@ -46,7 +44,7 @@ class FakeGlassesClient:
         self.url = url
         self.token = token
         self.device = device
-        self.received_frames: list[_pb.Frame] = []
+        self.received_frames: list[dict[str, Any]] = []
         self.close_code: int | None = None
         self.close_reason: str | None = None
         self._ws: Any = None
@@ -62,52 +60,53 @@ class FakeGlassesClient:
         await self.close()
 
     async def send_hello(self) -> None:
-        await self._ws.send(wire.hello(self.token, self.device))
+        await self._ws.send(protocol.hello(self.token, self.device))
 
     async def send_text(self, text: str) -> None:
-        await self._ws.send(wire.text(text))
+        await self._ws.send(protocol.text(text))
 
     async def send_audio_start(self) -> None:
-        await self._ws.send(wire.audio_start())
+        await self._ws.send(protocol.audio_start())
 
     async def send_audio_stop(self) -> None:
-        await self._ws.send(wire.audio_stop())
+        await self._ws.send(protocol.audio_stop())
 
     async def send_sessions_list(self) -> None:
-        await self._ws.send(wire.sessions_list())
+        await self._ws.send(protocol.sessions_list())
 
     async def send_sessions_switch(self, target: str) -> None:
-        await self._ws.send(wire.sessions_switch(target))
+        await self._ws.send(protocol.sessions_switch(target))
 
     async def send_sessions_new(self) -> None:
-        await self._ws.send(wire.sessions_new())
+        await self._ws.send(protocol.sessions_new())
 
     async def send_stop(self) -> None:
-        await self._ws.send(wire.stop())
+        await self._ws.send(protocol.stop())
 
     async def send_binary(self, data: bytes) -> None:
-        await self._ws.send(wire.audio_data(data))
+        """Send raw PCM bytes as a BINARY WS frame (no envelope)."""
+        await self._ws.send(data)
 
-    async def drain(self, *, timeout: float = 0.3) -> list[_pb.Frame]:  # noqa: ASYNC109
+    async def drain(self, *, timeout: float = 0.3) -> list[dict[str, Any]]:  # noqa: ASYNC109
         """Collect frames the server has pushed within timeout."""
-        frames: list[_pb.Frame] = []
+        frames: list[dict[str, Any]] = []
         try:
             with anyio.fail_after(timeout):
                 while True:
                     raw = await self._ws.recv()
-                    frames.append(wire.parse_frame(raw))
+                    frames.append(protocol.parse_client(raw))
         except TimeoutError:
             pass
         self.received_frames.extend(frames)
         return frames
 
-    async def recv_one(self, *, timeout: float = 1.0) -> _pb.Frame | None:  # noqa: ASYNC109
+    async def recv_one(self, *, timeout: float = 1.0) -> dict[str, Any] | None:  # noqa: ASYNC109
         try:
             with anyio.fail_after(timeout):
                 raw = await self._ws.recv()
         except TimeoutError:
             return None
-        frame = wire.parse_frame(raw)
+        frame = protocol.parse_client(raw)
         self.received_frames.append(frame)
         return frame
 
@@ -130,11 +129,13 @@ class FakeGlassesClient:
             self._ws = None
 
 
-def parse_frame(raw: bytes) -> _pb.Frame:
-    """Parse raw WS bytes into a Frame protobuf."""
-    return wire.parse_frame(raw)
+def parse_frame(raw: str | bytes) -> dict[str, Any]:
+    """Parse a raw WS text frame into a JSON frame dict."""
+    return protocol.parse_client(raw)
 
 
-def frames_of_type(frames: Iterable[_pb.Frame], kind: str) -> list[_pb.Frame]:
-    """Filter decoded frames by their oneof payload kind."""
-    return [f for f in frames if f.WhichOneof("payload") == kind]
+def frames_of_type(
+    frames: Iterable[dict[str, Any]], kind: str,
+) -> list[dict[str, Any]]:
+    """Filter decoded frames by their ``t`` discriminator."""
+    return [f for f in frames if f.get("t") == kind]
