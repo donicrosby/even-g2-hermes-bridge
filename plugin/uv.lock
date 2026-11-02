@@ -243,7 +243,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "qrcode", specifier = ">=7.4" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "websockets", marker = "extra == 'dev'", specifier = ">=16.0" },
+    { name = "websockets", marker = "extra == 'dev'", specifier = ">=15.0.1,<17" },
 ]
 provides-extras = ["dev"]
 
