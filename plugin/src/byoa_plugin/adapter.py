@@ -194,8 +194,20 @@ class EvenG2Adapter(BasePlatformAdapter):
     # ---- Lifecycle ---------------------------------------------------------
 
     async def connect(self, *, is_reconnect: bool = False) -> bool:  # noqa: ARG002
-        """Start the WS server and mark the platform as connected."""
+        """Start the WS server and mark the platform as connected.
+
+        Refuses to start when no bridge token is configured: an unset
+        `EVEN_G2_BRIDGE_TOKEN` would leave the WS endpoint with no auth gate,
+        exposing agent turns to any client that can reach the port.
+        """
         from byoa_plugin.hooks import set_adapter
+
+        if not self.cfg.token:
+            LOG.error(
+                "even-g2 refusing to start: EVEN_G2_BRIDGE_TOKEN unset; "
+                "WS endpoint would be unauthenticated",
+            )
+            return False
 
         set_adapter(self)
         self._server = BridgeServer(

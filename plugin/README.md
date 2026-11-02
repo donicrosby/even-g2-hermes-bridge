@@ -189,7 +189,7 @@ development with the glasses-app on the same network.
 ```bash
 cd plugin/
 uv sync                              # installs deps + dev tools
-uv run pytest                        # 206 tests across 13 files
+uv run pytest                        # 217 tests across 15 files
 uv run ruff check src/ tests/        # lint
 uv run basedpyright                  # type check
 ```

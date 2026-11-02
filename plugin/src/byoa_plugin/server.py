@@ -160,6 +160,11 @@ class BridgeServer:
             chat_id_candidate = str(hello.get("device") or "g2")
             LOG.info("hello_received", chat_id=chat_id_candidate, has_token=bool(client_token))
 
+            if not self.cfg.token:
+                LOG.warning("auth_failed", chat_id=chat_id_candidate, reason="server_token_unset")
+                await ws.close(code=1008, message=b"unauthorized")
+                return ws
+
             if not isinstance(client_token, str) or not hmac.compare_digest(client_token, self.cfg.token):
                 LOG.warning("auth_failed", chat_id=chat_id_candidate, reason="bad_token")
                 await ws.close(code=1008, message=b"unauthorized")
@@ -257,7 +262,7 @@ class BridgeServer:
             "mode": "even-g2",
             "bind": f"{self.cfg.ws_host}:{self.cfg.ws_port}",
             "advertised_url": self.cfg.advertised_url,
-            "token": self.cfg.token[:4] + "..." if self.cfg.token else "(unset)",
+            "token_set": bool(self.cfg.token),
             "byoa_enabled": bool(self.cfg.byoa_token),
             "chat_ids": self.registry.active_chat_ids(),
         })
@@ -316,22 +321,22 @@ class BridgeServer:
                 text=user_content,
                 message_type=MessageType.TEXT,
                 source=adapter.build_source(
-                    chat_id=_BYOA_CHAT_ID,
+                    chat_id=chat_id,
                     user_id=adapter.platform.value or "byoa",
                 ),
             )
-            LOG.info("byoa_turn_start chat_id=%s len=%d", _BYOA_CHAT_ID, len(user_content))
+            LOG.info("byoa_turn_start chat_id=%s len=%d", chat_id, len(user_content))
             await adapter.handle_message(event)
             content = await asyncio.wait_for(fut, timeout=_BYOA_TIMEOUT_SEC)
             LOG.info("byoa_turn_complete chat_id=%s len=%d", _BYOA_CHAT_ID, len(content))
             return content
         except TimeoutError:
             LOG.warning("byoa_turn_timeout chat_id=%s", _BYOA_CHAT_ID)
-            adapter.cancel_byoa_future(_BYOA_CHAT_ID)
+            adapter.cancel_byoa_future(chat_id)
             return None
         except Exception:
             LOG.exception("byoa_turn_failed chat_id=%s", _BYOA_CHAT_ID)
-            adapter.cancel_byoa_future(_BYOA_CHAT_ID)
+            adapter.cancel_byoa_future(chat_id)
             return None
 
     def _byoa_success(self, request: web.Request, content: str) -> web.Response:
